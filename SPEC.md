@@ -4671,17 +4671,19 @@ Messages, all little-endian:
 | Message | Bytes | Fields | Sent |
 | --- | --- | --- | --- |
 | POSITION | 18 | lat and lon in 1e-7 degrees, speed cm/s, course 0.01 degrees, satellites (0), fix, phone clock ms | each fix, about 1 Hz |
-| NAV STATE `0x01` | 12 | flags (bit 0 active), maneuver, meters to it, the maneuver after, meters between the two, remaining meters, remaining seconds | on each session change and every 1 s |
+| NAV STATE `0x01` | 12 | flags (bit 0 active, bit 2 remaining distance in units of 10 m), maneuver, meters to it, the maneuver after, meters between the two, remaining distance, remaining seconds | on each session change and every 1 s |
 | NAV TEXT `0x02` | 2 + up to 48 | length, the road being entered as UTF-8 | when it changes |
 | NAV DEST `0x03` | 10 | present, lat, lon | when it changes |
 | NAV ROUTE `0x04` | 4 + 8 per point | flags (start, end), sequence, count, up to 31 points | when the session's `Route` object changes |
 | NAV LIMIT `0x05` | 4 | units (0 km/h, 1 mph), posted limit in those units (0 unknown) | when either changes, and once per connection |
+| NAV PHONE `0x07` | 12 | battery percent (255 unknown), flags (bit 0 charging), Unix seconds, minutes east of UTC | on connecting and every 30 s |
 | NAV ROADS `0x06` | up to 252 | flags (start, end), sequence, an origin in the first chunk, then records of count, class and points as 16-bit offsets in 1e-5 degrees | every 250 m of travel, while the minimal display is on |
 
 - STATE repeats every second because `NavSession.state` does not emit while nothing changes, and
   the device hides its banner after 6 s without one.
-- The four distances and the time are 16-bit. Remaining distance stops at 65,535 m and remaining
-  time at 18.2 h. The device prints meters and kilometers whatever `Units` says.
+- The distances and the time are 16-bit. Remaining distance is sent in units of 10 m and stops
+  at 655 km; remaining time stops at 18.2 h. The turn banner prints meters and kilometers
+  whatever `Units` says; the device's other faces use the units NAV LIMIT carries.
 - `DeviceManeuver.of` maps the 21 `ManeuverType` values onto the device's 14 icons with an
   exhaustive `when`. Ramps are slight turns, forks are keeps, merge and depart are continue.
 - A paused drive is sent as no drive: the device clears its line and pin on any inactive
