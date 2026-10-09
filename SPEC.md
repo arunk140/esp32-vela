@@ -4672,7 +4672,7 @@ Messages, all little-endian:
 | --- | --- | --- | --- |
 | POSITION | 18 | lat and lon in 1e-7 degrees, speed cm/s, course 0.01 degrees, satellites (0), fix, phone clock ms | each fix, about 1 Hz |
 | NAV STATE `0x01` | 12 | flags (bit 0 active, bit 2 remaining distance in units of 10 m), maneuver, meters to it, the maneuver after, meters between the two, remaining distance, remaining seconds | on each session change and every 1 s |
-| NAV TEXT `0x02` | 2 + up to 48 | length, the road being entered as UTF-8 | when it changes |
+| NAV TEXT `0x02` | 2 + up to 48 | length, then UTF-8: the road being entered, else its number, else the destination for the last step, else the step's instruction | when it changes |
 | NAV DEST `0x03` | 10 | present, lat, lon | when it changes |
 | NAV ROUTE `0x04` | 4 + 8 per point | flags (start, end), sequence, count, up to 31 points | when the session's `Route` object changes |
 | NAV LIMIT `0x05` | 4 | units (0 km/h, 1 mph), posted limit in those units (0 unknown) | when either changes, and once per connection |

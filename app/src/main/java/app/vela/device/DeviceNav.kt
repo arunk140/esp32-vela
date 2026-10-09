@@ -1,6 +1,7 @@
 package app.vela.device
 
 import app.vela.core.model.LatLng
+import app.vela.core.model.Maneuver
 import app.vela.core.model.ManeuverType
 import app.vela.core.model.Route
 import app.vela.core.model.TrafficSpan
@@ -61,6 +62,20 @@ data class DeviceNavFrame(
     companion object {
         val IDLE = DeviceNavFrame()
 
+        /**
+         * The line under the distance: the road being entered, else its number, else the
+         * place for the last step, else the instruction the phone's own banner shows. Many
+         * steps carry no road (a fork, a ramp, a turn onto a lane with no name), and the
+         * instruction is always there.
+         */
+        private fun lineFor(next: Maneuver?, destination: String): String {
+            if (next == null) return ""
+            next.road?.takeIf { it.isNotBlank() }?.let { return it }
+            next.ref?.takeIf { it.isNotBlank() }?.let { return it }
+            if (next.type == ManeuverType.ARRIVE && destination.isNotBlank()) return destination
+            return next.instruction.trim()
+        }
+
         /** The frame for a session state. A paused drive is sent as no drive at all: the
          *  device drops its pin and line whenever it is told the drive is not active. */
         fun of(s: NavSession.State): DeviceNavFrame {
@@ -68,7 +83,9 @@ data class DeviceNavFrame(
             if (route == null || !(s.navigating || s.arrived)) return IDLE
             if (s.paused && !s.arrived) return IDLE
             val dest = route.polyline.lastOrNull()
-            if (s.arrived) return DeviceNavFrame(active = true, maneuver = DeviceManeuver.ARRIVE, dest = dest)
+            if (s.arrived) {
+                return DeviceNavFrame(active = true, maneuver = DeviceManeuver.ARRIVE, street = s.destinationLabel, dest = dest)
+            }
             val steps = route.maneuvers
             val next = steps.getOrNull(s.nav.stepIndex)
             val after = steps.getOrNull(s.nav.stepIndex + 1)
@@ -80,7 +97,7 @@ data class DeviceNavFrame(
                     else -> DeviceManeuver.NONE
                 },
                 distanceM = s.nav.distanceToNextManeuver.toInt(),
-                street = next?.road?.takeIf { it.isNotBlank() } ?: next?.ref.orEmpty(),
+                street = lineFor(next, s.destinationLabel),
                 afterManeuver = after?.let { DeviceManeuver.of(it.type) } ?: DeviceManeuver.NONE,
                 // A maneuver's own distance is the travel from it to the one after.
                 afterDistanceM = if (after != null) next?.distanceMeters?.toInt() ?: 0 else 0,
