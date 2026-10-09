@@ -58,6 +58,7 @@ class DeviceCalls(private val ctx: Context, private val out: Out) {
         private const val CMD_REJECT = 2
         private const val NAME_MAX = 48
         private const val NUMBER_MAX = 32
+        private const val SIMULATION_MS = 20_000L
 
         // Also the set the settings page asks for.
         val PERMISSIONS = arrayOf(
@@ -150,8 +151,38 @@ class DeviceCalls(private val ctx: Context, private val out: Out) {
         out.callWrite(byteArrayOf(END), "call")
     }
 
+    /** True while a pretend call is ringing on the device (Settings > Nav device). */
+    var simulating = false
+        private set
+
+    private val endSimulation = Runnable { stopSimulation() }
+
+    /**
+     * Rings the device with a made-up caller, to see its call screen without a real call. It
+     * needs no permission and touches no real call: Answer or Decline on the device, or
+     * [SIMULATION_MS] passing, just ends it.
+     */
+    fun simulate(name: String, number: String) {
+        if (!out.callLinkReady()) return
+        main.removeCallbacks(endSimulation)
+        simulating = true
+        sendRing(name, number)
+        main.postDelayed(endSimulation, SIMULATION_MS)
+    }
+
+    private fun stopSimulation() {
+        if (!simulating) return
+        simulating = false
+        main.removeCallbacks(endSimulation)
+        sendEnd()
+    }
+
     fun handle(cmd: ByteArray) {
         if (cmd.isEmpty()) return
+        if (simulating) {
+            stopSimulation()
+            return
+        }
         when (cmd[0].toInt()) {
             CMD_ANSWER -> {
                 if (!has(Manifest.permission.ANSWER_PHONE_CALLS)) {

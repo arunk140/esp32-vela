@@ -5781,6 +5781,10 @@ longer than 58 points is sent as pieces that share an end point. The tiles come 
 downloaded basemap when it holds them and from the tile host otherwise; a miss is retried after
 30 s. Nothing is sent while the device shows its map, which has tiles of its own.
 
+Settings > Nav device > "Simulate a call" rings the device with a made-up caller
+(`DeviceCalls.simulate`) for 20 s or until the device answers or declines. It works with the
+calls switch off, needs no permission, and never touches a real call.
+
 Commands are one opcode byte and its arguments, written to CMD: unpair `0x04`, brightness
 `0x05` (0 to 100), pair `0x06` (the six digits), sleep `0x07`, map theme `0x08`, minimal display
 `0x09`. STATUS is read on connecting and every 5 s after: battery mV (u16), link, frames per second,
