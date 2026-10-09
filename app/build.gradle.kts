@@ -254,6 +254,12 @@ dependencies {
     implementation("org.apache.commons:commons-compress:1.28.0")
 
     implementation(libs.androidx.core.ktx)
+    // The nav device's QR pairing (app/device/DevicePairing): the camera, and ML Kit's bundled
+    // barcode model to read the code. The one Google SDK in the app, to be replaced.
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.mlkit.barcode.scanning)
     implementation(libs.androidx.webkit)
     // Cronet, Chromium's own network stack, for Google-host requests (app/net/CronetTransport,
     // calibration `useCronet`) and the WebView proxy (`webProxy`). Chromium's OWN prebuilt Release

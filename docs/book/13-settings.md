@@ -2,7 +2,7 @@
 
 ## What you see
 
-Settings opens over the map as a list of twelve pages with a search field above it.
+Settings opens over the map as a list of thirteen pages with a search field above it.
 
 - Appearance: theme, font, interface size, map look (the Vela look on Liberty, or OpenFreeMap's
   Bright, Positron, Fiord or Black as served), map colors, map buttons (round or square), units,
@@ -13,6 +13,7 @@ Settings opens over the map as a list of twelve pages with a search field above 
 - Places: "Place icons on the map", which places the map draws, what a place page loads.
 - Navigation: route picker, road-ahead bar, arrow, speed limit, zoom keys, cameras
   ([chapter 3](03-cameras.md)), traffic rechecks.
+- Nav device: pairing a Bluetooth display, its link, brightness, and what it also shows.
 - Voice: spoken directions, street names, the voice library, speed and volume.
 - Search: voice search, on-device speech engines, contact search, and Quick search buttons,
   a page of its own under Search for which category chips show and in what order.
@@ -116,6 +117,15 @@ and Right with no target are swallowed for the same reason.
 A page asks for focus only once its entry is RESUMED (`LocalSettingsPageActive`), so a page
 sliding in does not take focus from the one being left. [docs/dpad.md](../dpad.md) covers the
 rest of keypad operation.
+
+### Nav device
+
+The Nav device page pairs and controls a Bluetooth display. With nothing paired it shows one
+button, which opens the camera on the device's QR code. Once paired it shows the device's name
+and link state, a Connect switch, brightness and map theme, the two optional feeds (what is
+playing, incoming calls), and Sleep and Unpair. Each permission is asked for when its switch is
+turned on: Nearby devices for the link, the camera for pairing, notification access for media,
+and the phone permissions for calls. [SPEC 10.9](../../SPEC.md) has the wire contract.
 
 ## Limits
 
