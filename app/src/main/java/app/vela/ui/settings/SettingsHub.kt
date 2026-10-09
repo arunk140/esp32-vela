@@ -399,6 +399,7 @@ private val SEARCH_INDEX: List<Pair<Int, SettingsSection>> = listOf(
     R.string.device_connect to SettingsSection.DEVICE,
     R.string.device_brightness to SettingsSection.DEVICE,
     R.string.device_dark_map to SettingsSection.DEVICE,
+    R.string.device_minimal to SettingsSection.DEVICE,
     R.string.device_media to SettingsSection.DEVICE,
     R.string.device_calls to SettingsSection.DEVICE,
     // Voice

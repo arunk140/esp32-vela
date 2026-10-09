@@ -190,6 +190,10 @@ class DeviceService : Service() {
                 link?.cmdSetTheme(DeviceLinkPrefs.darkMap.value)
                 return START_STICKY
             }
+            ACTION_MINIMAL -> {
+                link?.cmdSetMinimal(DeviceLinkPrefs.minimal.value)
+                return START_STICKY
+            }
             ACTION_REFRESH -> {
                 syncBridges()
                 if (connected) startLocation()
@@ -229,8 +233,12 @@ class DeviceService : Service() {
 
         override fun onBonded() {}
 
-        override fun onStatus(batteryMv: Int, link: Int, darkMap: Boolean) {
+        override fun onStatus(batteryMv: Int, link: Int, darkMap: Boolean, minimal: Boolean?) {
             if (DeviceLinkPrefs.darkMap.value != darkMap) DeviceLinkPrefs.setDarkMap(this@DeviceService, darkMap)
+            // The mode can also be switched on the device itself, by a long press on its map.
+            if (minimal != null && DeviceLinkPrefs.minimal.value != minimal) {
+                DeviceLinkPrefs.setMinimal(this@DeviceService, minimal)
+            }
         }
 
         /** Discovery, MTU and the first subscription are done: writes now reach the device. */
@@ -422,6 +430,7 @@ class DeviceService : Service() {
         private const val ACTION_SLEEP = "app.vela.device.SLEEP"
         private const val ACTION_BRIGHTNESS = "app.vela.device.BRIGHTNESS"
         private const val ACTION_THEME = "app.vela.device.THEME"
+        private const val ACTION_MINIMAL = "app.vela.device.MINIMAL"
         private const val ACTION_REFRESH = "app.vela.device.REFRESH"
         private const val EXTRA_FRESH = "fresh"
         private const val CHANNEL_ID = "vela_device"
@@ -461,6 +470,7 @@ class DeviceService : Service() {
         fun sleep(context: Context) = send(context, ACTION_SLEEP)
         fun pushBrightness(context: Context) = send(context, ACTION_BRIGHTNESS)
         fun pushTheme(context: Context) = send(context, ACTION_THEME)
+        fun pushMinimal(context: Context) = send(context, ACTION_MINIMAL)
         /** A switch on the settings page changed, or a permission was just granted. */
         fun refresh(context: Context) = send(context, ACTION_REFRESH)
 
