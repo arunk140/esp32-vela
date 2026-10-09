@@ -48,16 +48,21 @@ class DeviceNavTest {
             afterManeuver = DeviceManeuver.RIGHT, afterDistanceM = 1200, remainingM = 4321, remainingS = 600,
         )
         assertArrayEquals(
-            byteArrayOf(0x01, 0x01, 3, 0xFA.toByte(), 0x00, 6, 0xB0.toByte(), 0x04, 0xE1.toByte(), 0x10, 0x58, 0x02),
+            // 4,321 m remaining goes out as 432 units of 10 m, with the flag that says so.
+            byteArrayOf(0x01, 0x05, 3, 0xFA.toByte(), 0x00, 6, 0xB0.toByte(), 0x04, 0xB0.toByte(), 0x01, 0x58, 0x02),
             DeviceNavEncoder.state(f),
         )
     }
 
     @Test fun longDistancesClampInsteadOfWrapping() {
-        val b = ByteBuffer.wrap(DeviceNavEncoder.state(DeviceNavFrame(remainingM = 80_000, distanceM = -5)))
+        val b = ByteBuffer.wrap(DeviceNavEncoder.state(DeviceNavFrame(remainingM = 80_000, distanceM = -5, afterDistanceM = 90_000)))
             .order(ByteOrder.LITTLE_ENDIAN)
         assertEquals(0, b.getShort(3).toInt() and 0xFFFF)
-        assertEquals(0xFFFF, b.getShort(8).toInt() and 0xFFFF)
+        assertEquals(0xFFFF, b.getShort(6).toInt() and 0xFFFF)
+        // 80 km fits now that the unit is 10 m; 700 km still stops at the top of the field.
+        assertEquals(8_000, b.getShort(8).toInt() and 0xFFFF)
+        val far = ByteBuffer.wrap(DeviceNavEncoder.state(DeviceNavFrame(remainingM = 700_000))).order(ByteOrder.LITTLE_ENDIAN)
+        assertEquals(0xFFFF, far.getShort(8).toInt() and 0xFFFF)
     }
 
     @Test fun textIsCutOnACharacterBoundary() {
@@ -113,6 +118,18 @@ class DeviceNavTest {
             points += n
         }
         assertEquals(thin.size, points)
+    }
+
+    @Test fun phoneBatteryAndClock() {
+        val p = ByteBuffer.wrap(DeviceNavEncoder.phone(50, charging = true, epochS = 1_791_000_000L, utcOffsetMin = -420))
+            .order(ByteOrder.LITTLE_ENDIAN)
+        assertEquals(12, p.capacity())
+        assertEquals(0x07, p.get(0).toInt())
+        assertEquals(50, p.get(1).toInt())
+        assertEquals(1, p.get(2).toInt())
+        assertEquals(1_791_000_000, p.getInt(4))
+        assertEquals(-420, p.getShort(8).toInt())
+        assertEquals(0xFF, DeviceNavEncoder.phone(null, false, 0, 0)[1].toInt() and 0xFF)
     }
 
     @Test fun limitCarriesItsUnits() {
