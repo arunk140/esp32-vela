@@ -59,17 +59,19 @@ data class DeviceNavFrame(
     companion object {
         val IDLE = DeviceNavFrame()
 
-        /** The frame for a session state. A paused drive keeps its pin and hides the banner. */
+        /** The frame for a session state. A paused drive is sent as no drive at all: the
+         *  device drops its pin and line whenever it is told the drive is not active. */
         fun of(s: NavSession.State): DeviceNavFrame {
             val route = s.route
             if (route == null || !(s.navigating || s.arrived)) return IDLE
+            if (s.paused && !s.arrived) return IDLE
             val dest = route.polyline.lastOrNull()
             if (s.arrived) return DeviceNavFrame(active = true, maneuver = DeviceManeuver.ARRIVE, dest = dest)
             val steps = route.maneuvers
             val next = steps.getOrNull(s.nav.stepIndex)
             val after = steps.getOrNull(s.nav.stepIndex + 1)
             return DeviceNavFrame(
-                active = !s.paused,
+                active = true,
                 maneuver = when {
                     s.nav.offRoute -> DeviceManeuver.OFF_ROUTE
                     next != null -> DeviceManeuver.of(next.type)
@@ -105,6 +107,7 @@ class DeviceNavEncoder(private val out: Out) {
     private var lastStreet: String? = null
     private var lastDest: Pair<Int, Int>? = null
     private var destSent = false
+    private var lastLimit: Pair<Boolean, Int>? = null
 
     fun send(f: DeviceNavFrame) {
         if (!out.navReady()) return
@@ -123,6 +126,16 @@ class DeviceNavEncoder(private val out: Out) {
         }
     }
 
+    /** The posted limit in the units Vela shows speeds in; 0 when it is not known. Sent on
+     *  change, and once per connection so the device learns the units either way. */
+    fun sendLimit(imperial: Boolean, limit: Int) {
+        if (!out.navReady()) return
+        val now = imperial to limit
+        if (now == lastLimit) return
+        lastLimit = now
+        out.navWrite(limit(imperial, limit), "navlim")
+    }
+
     /** The route line as [routeChunks] built it. Never coalesced: every chunk is needed. */
     fun sendRoute(chunks: List<ByteArray>) {
         if (!out.navReady()) return
@@ -134,6 +147,7 @@ class DeviceNavEncoder(private val out: Out) {
         lastStreet = null
         lastDest = null
         destSent = false
+        lastLimit = null
     }
 
     companion object {
@@ -141,6 +155,7 @@ class DeviceNavEncoder(private val out: Out) {
         private const val TEXT: Byte = 0x02
         private const val DEST: Byte = 0x03
         private const val ROUTE: Byte = 0x04
+        private const val LIMIT: Byte = 0x05
         private const val F_ACTIVE = 0x01
         private const val ROUTE_F_START = 0x01
         private const val ROUTE_F_END = 0x02
@@ -186,6 +201,14 @@ class DeviceNavEncoder(private val out: Out) {
                 put(if (latLonE7 != null) 1 else 0)
                 putInt(latLonE7?.first ?: 0)
                 putInt(latLonE7?.second ?: 0)
+            }.array()
+
+        /** 4 bytes: type, units (0 km/h, 1 mph), u16 limit in those units (0 unknown). */
+        fun limit(imperial: Boolean, limit: Int): ByteArray =
+            ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).apply {
+                put(LIMIT)
+                put(if (imperial) 1 else 0)
+                putShort(u16(limit))
             }.array()
 
         /** Header (type, flags, seq, count) then count pairs of i32 lat e7, lon e7. Fewer than

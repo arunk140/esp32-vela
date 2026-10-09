@@ -7295,6 +7295,20 @@ class MapViewModel @Inject constructor(
     // future pref read that has to happen at construction belongs after this line too.
     init { refreshRouteBar(); scheduleAutoRegionPatches() }
 
+    // The posted limit the phone shows, for a paired nav device (the device service cannot
+    // read this view model). Cleared when the view model goes, so the device never keeps a
+    // limit nothing is updating.
+    init {
+        viewModelScope.launch {
+            try {
+                state.map { it.speedLimitKmh ?: it.speedLimitOverlayKmh }.distinctUntilChanged()
+                    .collect { app.vela.device.DeviceBridge.speedLimitKmh.value = it }
+            } finally {
+                app.vela.device.DeviceBridge.speedLimitKmh.value = null
+            }
+        }
+    }
+
     /**
      * "Update downloaded regions" doing what it says (2026-09-22). The setting used to decide only
      * whether the Update BUTTON could use a patch; nothing ever updated on its own, whatever the
