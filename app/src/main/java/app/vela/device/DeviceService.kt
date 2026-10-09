@@ -397,7 +397,10 @@ class DeviceService : Service() {
             val chunks = withContext(Dispatchers.Default) {
                 DeviceNavEncoder.routeChunks(route?.polyline ?: emptyList())
             }
-            encoder.sendRoute(chunks)
+            // The congestion goes after the line it belongs to: the device drops the old
+            // stretches when a new line starts. A traffic recheck swaps the route object, so
+            // fresh congestion arrives the same way.
+            encoder.sendRoute(chunks + DeviceNavEncoder.traffic(route))
         }
     }
 

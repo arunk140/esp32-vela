@@ -120,6 +120,33 @@ class DeviceNavTest {
         assertEquals(thin.size, points)
     }
 
+    @Test fun trafficIsSentAsFractionsOfTheRoute() {
+        val r = route(step(ManeuverType.DEPART, "Russell Blvd", 5_000.0)).copy(
+            trafficSpans = listOf(
+                app.vela.core.model.TrafficSpan(level = 2, startMeters = 2_500.0, lengthMeters = 1_250.0),
+                app.vela.core.model.TrafficSpan(level = 1, startMeters = 0.0, lengthMeters = 500.0),
+                app.vela.core.model.TrafficSpan(level = 7, startMeters = 4_900.0, lengthMeters = 500.0),
+            ),
+        )
+        val t = ByteBuffer.wrap(DeviceNavEncoder.traffic(r)).order(ByteOrder.LITTLE_ENDIAN)
+        assertEquals(2 + 3 * 5, t.capacity())
+        assertEquals(0x08, t.get(0).toInt())
+        assertEquals(3, t.get(1).toInt())
+        // In order along the route: the first tenth, the stretch from half to three quarters,
+        // and one that runs past the end, which stops at it. A level above 3 is sent as 3.
+        assertEquals(0, t.getShort(2).toInt() and 0xFFFF)
+        assertEquals(6553, t.getShort(4).toInt() and 0xFFFF)
+        assertEquals(1, t.get(6).toInt())
+        assertEquals(32767, t.getShort(7).toInt() and 0xFFFF)
+        assertEquals(49151, t.getShort(9).toInt() and 0xFFFF)
+        assertEquals(2, t.get(11).toInt())
+        assertEquals(65535, t.getShort(14).toInt() and 0xFFFF)
+        assertEquals(3, t.get(16).toInt())
+
+        assertArrayEquals(byteArrayOf(0x08, 0), DeviceNavEncoder.traffic(null))
+        assertArrayEquals(byteArrayOf(0x08, 0), DeviceNavEncoder.traffic(route(step(ManeuverType.DEPART, null, 1.0))))
+    }
+
     @Test fun phoneBatteryAndClock() {
         val p = ByteBuffer.wrap(DeviceNavEncoder.phone(50, charging = true, epochS = 1_791_000_000L, utcOffsetMin = -420))
             .order(ByteOrder.LITTLE_ENDIAN)
