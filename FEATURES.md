@@ -343,7 +343,8 @@ What Vela Maps does today, one line per feature. How each one works is in [SPEC.
   distance left, the route line and the destination.
 - With "What is playing" on, it shows the track and its cover, and its buttons control playback
   and volume.
-- With "Incoming calls" on, it shows who is calling, and its buttons answer or reject.
+- With "Incoming calls" on, it shows who is calling, and its buttons answer or decline. Calls in
+  WhatsApp and similar apps show too.
 - Set the device's brightness and map theme, send it to sleep, or unpair it from the same page.
 - Congestion on your route colors the device's route line and its trip progress arc.
 - The device shows the posted speed limit as a road sign, and has a speedometer in your units.
