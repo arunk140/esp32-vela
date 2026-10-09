@@ -94,7 +94,9 @@ addresses and "checked on a drive to X" notes add up to where the developer live
 
 ### What Vela never does
 
-- No Google Play services, Firebase, Fused location, Play Integrity or any Google SDK.
+- No Google Play services, Firebase, Fused location, Play Integrity or any Google SDK. One
+  exception in this fork: ML Kit's bundled barcode model reads the nav device's pairing QR
+  (`device/DevicePairing.kt`) until an open decoder replaces it. Add no other.
 - No static Google API key. Requests are made the way a logged-out browser makes them.
 - No Vela backend, account or telemetry.
 - No proprietary assets in the repo (fonts, map data, voices).

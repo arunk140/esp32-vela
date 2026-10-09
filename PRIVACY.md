@@ -64,6 +64,14 @@ logged-out browser's. They are not tied to an account.
 
 None of these receives a Google account, a name, a device id or your contacts.
 
+A paired nav device (Settings > Nav device) is not a service: it is hardware you own, reached
+over Bluetooth, and nothing it is sent leaves it. While connected it receives your position,
+speed and heading about once a second, and during a drive the next turn, the road names, the
+route line and the destination. With "What is playing" on it also receives the track, artist and
+cover. With "Incoming calls" on it receives the caller's name and number while the phone rings.
+Reading the pairing QR uses the camera and Google's ML Kit barcode decoder, which runs on the
+phone and sends nothing.
+
 Settings > Privacy > "Live traffic only when I tap" keeps a planned route on the open routers
 alone until you tap Show traffic on the route list. Until then Google is not asked.
 

@@ -22,6 +22,24 @@
          Settings toggle on), matched entirely on-device. -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
 
+    <!-- The nav device (Settings > Nav device): a paired Bluetooth display that shows the map,
+         the next turn and, when asked to, what is playing and who is calling. Everything here is
+         asked for on that page, at the moment the feature is turned on. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- Reading the QR code the device shows when it wants to pair. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- A ringing call on the device: that there is one, its number, and its answer and reject
+         buttons. The caller's name uses READ_CONTACTS, already declared above. -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+
     <!-- Haptic turn cues during navigation (normal permission, auto-granted). -->
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Voice search, tier-1 ONLY: recording the mic for the on-device Whisper model. Requested
@@ -208,6 +226,24 @@
             android:name=".service.NavigationService"
             android:exported="false"
             android:foregroundServiceType="location" />
+
+        <!-- Holds the Bluetooth link to a paired nav device and feeds it position and the drive.
+             The location type keeps fixes coming with the screen off. -->
+        <service
+            android:name=".device.DeviceService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice|location" />
+        <!-- Does nothing itself. Android only lets an app read what is playing once the user
+             has enabled a notification listener of its own. -->
+        <service
+            android:name=".device.DeviceMediaListener"
+            android:exported="false"
+            android:label="@string/device_media_listener_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
 
         <!-- Refcounted keeper that holds the process foreground-important while any long
              download (voice model, region graph, place pack, update APK) is in flight, so

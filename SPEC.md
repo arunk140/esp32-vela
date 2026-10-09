@@ -4643,6 +4643,67 @@ the book/order action. The Street View pill opens the in-app viewer, so that swi
 alone. It is hidden only when Google is off. A new review, photo or external-link surface goes
 behind the matching holder.
 
+### 10.9 Nav device
+
+A nav device is an ESP32 with a round display that pairs over Bluetooth LE and shows a map, the
+next turn, what is playing and a ringing call. `app/device/` holds all of it, and Settings > Nav
+device (`DeviceSettingsScreen`) is its only screen. The device's firmware defines the contract
+in its `ble_service.h`. The UUIDs, command bytes and layouts in `DeviceLink` and
+`DeviceNavEncoder` mirror that file, and the two change together.
+
+- `DeviceService` is a foreground service of type `connectedDevice`, plus `location` when fine
+  location is granted. It runs while a device is paired, `DeviceLinkPrefs.enabled` is on and
+  Nearby devices is granted. `VelaApp.onCreate` and `MainActivity.onStart` start it, and a start
+  the system refuses is swallowed.
+- `DeviceLink` is the GATT client for one bonded device. Android allows one GATT operation at a
+  time, so every write, read and subscription goes through one queue. A write with a tag replaces
+  a queued write with the same tag. Position, nav state and media state are tagged. Route chunks
+  and album art chunks are not.
+- Pairing reads the QR on the device (`DeviceQr`: name `n`, address `m`, six-digit code `t`),
+  bonds with Just Works, then writes `CMD_PAIR` with the code. A fresh scan removes any system
+  bond for that address first: a bond the device has lost makes Android ask to pair on every
+  reconnect.
+- The service reads `NavSession.state` and `LocationProvider.updates()` and writes neither. With
+  the location simulator or a demo drive on, the device follows the simulated fixes.
+
+Messages, all little-endian:
+
+| Message | Bytes | Fields | Sent |
+| --- | --- | --- | --- |
+| POSITION | 18 | lat and lon in 1e-7 degrees, speed cm/s, course 0.01 degrees, satellites (0), fix, phone clock ms | each fix, about 1 Hz |
+| NAV STATE `0x01` | 12 | flags (bit 0 active), maneuver, meters to it, the maneuver after, meters between the two, remaining meters, remaining seconds | on each session change and every 1 s |
+| NAV TEXT `0x02` | 2 + up to 48 | length, the road being entered as UTF-8 | when it changes |
+| NAV DEST `0x03` | 10 | present, lat, lon | when it changes |
+| NAV ROUTE `0x04` | 4 + 8 per point | flags (start, end), sequence, count, up to 31 points | when the session's `Route` object changes |
+
+- STATE repeats every second because `NavSession.state` does not emit while nothing changes, and
+  the device hides its banner after 6 s without one.
+- The four distances and the time are 16-bit. Remaining distance stops at 65,535 m and remaining
+  time at 18.2 h. The device prints meters and kilometers whatever `Units` says.
+- `DeviceManeuver.of` maps the 21 `ManeuverType` values onto the device's 14 icons with an
+  exhaustive `when`. Ramps are slight turns, forks are keeps, merge and depart are continue.
+- The active flag is off while the drive is paused and on while the arrival card shows. The
+  destination is the last point of the route line.
+- The route line is thinned by Douglas-Peucker to 512 points, the device's buffer, with a
+  tolerance that doubles from 5 m. A route swap (reroute, faster route, added stop) is detected by
+  object identity and sends the new line.
+- Course is the bearing of the route line at the car's distance along it while a drive is on the
+  route. Otherwise it is the GPS bearing above 1.5 m/s, and the last value sent below that. The
+  compass is not used: the phone is not fixed to the vehicle.
+- A fix with accuracy of 50 m or worse is sent with fix 0, which grays the device's marker.
+- When the link drops, the encoder forgets what it sent, so a reconnect sends the street, the
+  destination and the line again.
+
+Media (`DeviceMedia`) and calls (`DeviceCalls`) are off until their switches are turned on.
+Media reads the active media session, which Android allows once `DeviceMediaListener` has
+notification access; the listener does nothing else. It sends the track, a 200 by 200 JPEG of the
+cover from the bitmap the player publishes (never fetched from a URL), position and volume, and
+takes play, skip and volume commands back. Calls sends the caller's name and number while a call
+rings and takes answer and reject back.
+
+No log line in `app/device/` carries a coordinate, a street, a track, a caller or the device's
+address.
+
 ---
 
 ## 11. Remote resilience
@@ -4713,6 +4774,9 @@ Regressing one of these blocks a release.
   is never required.
 - Dictation is on-device or an installed recognizer app, never a cloud speech API.
 - No GMS: no FCM, Firebase, Play Integrity or fused location. Push, if ever, is UnifiedPush.
+- One Google SDK is in the build: ML Kit's bundled barcode model, which reads a nav device's
+  pairing QR (10.9). It decodes on the phone, runs only while the pairing camera is open, and
+  needs no Play services. It is to be replaced by an open decoder.
 - No static Google API key in any build variant.
 - EU consent: `SOCS` and `CONSENT` are pre-seeded, and a `Set-Cookie` that would downgrade
   `CONSENT` to `PENDING` is dropped.

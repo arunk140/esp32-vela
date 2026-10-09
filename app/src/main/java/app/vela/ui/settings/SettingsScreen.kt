@@ -20,6 +20,7 @@ import app.vela.ui.settings.sections.AboutSettingsScreen
 import app.vela.ui.settings.sections.AppearanceSettingsScreen
 import app.vela.ui.settings.sections.PrivacySettingsScreen
 import app.vela.ui.settings.sections.PerformanceSettingsScreen
+import app.vela.ui.settings.sections.DeviceSettingsScreen
 import app.vela.ui.settings.sections.DiagnosticsSettingsScreen
 import app.vela.ui.settings.sections.MapSettingsScreen
 import app.vela.ui.settings.sections.NavigationSettingsScreen
@@ -94,6 +95,7 @@ fun SettingsScreen(vm: MapViewModel, navController: androidx.navigation.NavHostC
                         SettingsSection.MAP -> MapSettingsScreen(onBack = toHub)
                         SettingsSection.PLACES -> PlacesSettingsScreen(onBack = toHub)
                         SettingsSection.NAVIGATION -> NavigationSettingsScreen(vm, onBack = toHub)
+                        SettingsSection.DEVICE -> DeviceSettingsScreen(onBack = toHub)
                         SettingsSection.VOICE -> VoiceSettingsScreen(vm, onBack = toHub, openLibrary = openVoiceLibrary)
                         SettingsSection.SEARCH -> SearchSettingsScreen(vm, onBack = toHub)
                         SettingsSection.OFFLINE -> OfflineSettingsScreen(vm, onBack = toHub, onCloseSettings = close, onOpenVoice = { open(SettingsSection.VOICE, null) })

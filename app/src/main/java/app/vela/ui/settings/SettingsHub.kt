@@ -85,6 +85,7 @@ internal fun SettingsHub(
             SettingsSection.MAP to stringResource(R.string.settings_map),
             SettingsSection.PLACES to stringResource(R.string.settings_places),
             SettingsSection.NAVIGATION to stringResource(R.string.settings_navigation),
+            SettingsSection.DEVICE to stringResource(R.string.settings_device),
             SettingsSection.VOICE to stringResource(R.string.settings_voice),
             SettingsSection.SEARCH to stringResource(R.string.settings_search),
             SettingsSection.OFFLINE to stringResource(R.string.settings_offline),
@@ -164,6 +165,17 @@ internal fun SettingsHub(
             subtitle = stringResource(R.string.settings_hub_navigation_sub),
             modifier = rowModifier(SettingsSection.NAVIGATION, first = false),
             onClick = { onOpen(SettingsSection.NAVIGATION, null) },
+        )
+        HubRow(
+            icon = SymOutlined.Bluetooth,
+            title = stringResource(R.string.settings_device),
+            // The paired device's name and whether it is connected, when there is one.
+            subtitle = app.vela.device.DeviceLinkPrefs.bond.value?.let { b ->
+                val state = stringResource(app.vela.device.DeviceService.linkState.value.label)
+                if (b.name.isBlank()) state else "${b.name} \u00b7 $state"
+            } ?: stringResource(R.string.settings_hub_device_sub),
+            modifier = rowModifier(SettingsSection.DEVICE, first = false),
+            onClick = { onOpen(SettingsSection.DEVICE, null) },
         )
         HubRow(
             icon = SymOutlined.VolumeUp,
@@ -370,6 +382,14 @@ private val SEARCH_INDEX: List<Pair<Int, SettingsSection>> = listOf(
     R.string.settings_sim_location to SettingsSection.DIAGNOSTICS,
     R.string.settings_parking_history to SettingsSection.SAVED_PLACES,
     R.string.settings_saved_routes to SettingsSection.SAVED_PLACES,
+    // Nav device
+    R.string.settings_device to SettingsSection.DEVICE,
+    R.string.device_pair to SettingsSection.DEVICE,
+    R.string.device_connect to SettingsSection.DEVICE,
+    R.string.device_brightness to SettingsSection.DEVICE,
+    R.string.device_dark_map to SettingsSection.DEVICE,
+    R.string.device_media to SettingsSection.DEVICE,
+    R.string.device_calls to SettingsSection.DEVICE,
     // Voice
     R.string.settings_spoken_directions to SettingsSection.VOICE,
     R.string.settings_spoken_road_names to SettingsSection.VOICE,
