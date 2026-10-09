@@ -1553,5 +1553,6 @@
     <string name="device_state_connected">Connected</string>
     <string name="device_state_asleep">Asleep. Touch the device to wake it.</string>
     <string name="device_channel_name">Nav device</string>
+    <string name="device_notif_disconnect">Disconnect</string>
     <string name="device_media_listener_label">Vela nav device media</string>
 </resources>

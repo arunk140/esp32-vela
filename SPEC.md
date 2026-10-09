@@ -5720,6 +5720,9 @@ in its `ble_service.h`. The UUIDs, command bytes and layouts in `DeviceLink` and
   location is granted. It runs while a device is paired, `DeviceLinkPrefs.enabled` is on and
   Nearby devices is granted. `VelaApp.onCreate` and `MainActivity.onStart` start it, and a start
   the system refuses is swallowed.
+- Its notification says where the link stands. While connected it has one action, Disconnect,
+  which sends the sleep command: the device goes to deep sleep, the link drops, and a touch on
+  the device wakes it and reconnects.
 - `DeviceLink` is the GATT client for one bonded device. Android allows one GATT operation at a
   time, so every write, read and subscription goes through one queue. A write with a tag replaces
   a queued write with the same tag. Position, nav state and media state are tagged. Route chunks
