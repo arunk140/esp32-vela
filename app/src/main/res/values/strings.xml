@@ -1406,6 +1406,9 @@
     <string name="device_media_hint">The track, its cover and the volume, with the device\'s buttons controlling playback. Needs notification access, which Android grants on its own page.</string>
     <string name="device_calls">Incoming calls</string>
     <string name="device_calls_hint">Who is calling, with buttons on the device to answer or reject. Needs the phone, call log and contacts permissions.</string>
+    <string name="device_simulate_call">Simulate a call</string>
+    <string name="device_simulate_call_hint">Rings the device with a made-up caller for 20 seconds, or until you answer or decline on it. No real call is made.</string>
+    <string name="device_simulate_call_name">Test Caller</string>
     <string name="device_sleep">Sleep</string>
     <string name="device_sleep_hint">A sleeping device wakes when its screen is touched. Unpair makes it show its QR code again.</string>
     <string name="device_unpair">Unpair</string>

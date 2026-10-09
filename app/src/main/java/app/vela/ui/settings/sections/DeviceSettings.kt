@@ -191,6 +191,21 @@ internal fun DeviceSettingsScreen(onBack: () -> Unit) {
                     },
                     hint = stringResource(R.string.device_calls_hint),
                 )
+                GroupDivider()
+                // Works with the switch off too: it shows what the device does with a call.
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+                    FilledTonalButton(
+                        enabled = DeviceService.linkState.value == DeviceService.Link.CONNECTED,
+                        modifier = Modifier.dpadHighlight(ButtonDefaults.filledTonalShape),
+                        onClick = { DeviceService.simulateCall(context) },
+                    ) { Text(stringResource(R.string.device_simulate_call)) }
+                    Text(
+                        stringResource(R.string.device_simulate_call_hint),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
             }
             SettingsGroup {
                 Row(
