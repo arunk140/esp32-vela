@@ -40,6 +40,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+import kotlin.math.roundToInt
 
 /**
  * Holds the Bluetooth link to a paired nav device and feeds it what Vela already knows: where the
@@ -332,8 +333,14 @@ class DeviceService : Service() {
     }
 
     private fun pushNav(s: NavSession.State) {
-        encoder.send(DeviceNavFrame.of(s))
-        val route = s.route?.takeIf { s.navigating || s.arrived }
+        val frame = DeviceNavFrame.of(s)
+        encoder.send(frame)
+        val imperial = app.vela.ui.Units.imperial.value
+        val kmh = DeviceBridge.speedLimitKmh.value
+        encoder.sendLimit(imperial, if (kmh == null) 0 else (if (imperial) kmh / 1.609344 else kmh).roundToInt())
+        // The line goes with the frame: an idle frame (no drive, or a paused one) makes the
+        // device clear its line, so the line is sent again when the drive is back.
+        val route = s.route?.takeIf { frame != DeviceNavFrame.IDLE }
         if (routeSent && route === sentRoute) return
         routeSent = true
         sentRoute = route

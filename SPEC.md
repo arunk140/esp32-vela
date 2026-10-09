@@ -4675,6 +4675,7 @@ Messages, all little-endian:
 | NAV TEXT `0x02` | 2 + up to 48 | length, the road being entered as UTF-8 | when it changes |
 | NAV DEST `0x03` | 10 | present, lat, lon | when it changes |
 | NAV ROUTE `0x04` | 4 + 8 per point | flags (start, end), sequence, count, up to 31 points | when the session's `Route` object changes |
+| NAV LIMIT `0x05` | 4 | units (0 km/h, 1 mph), posted limit in those units (0 unknown) | when either changes, and once per connection |
 
 - STATE repeats every second because `NavSession.state` does not emit while nothing changes, and
   the device hides its banner after 6 s without one.
@@ -4682,8 +4683,13 @@ Messages, all little-endian:
   time at 18.2 h. The device prints meters and kilometers whatever `Units` says.
 - `DeviceManeuver.of` maps the 21 `ManeuverType` values onto the device's 14 icons with an
   exhaustive `when`. Ramps are slight turns, forks are keeps, merge and depart are continue.
-- The active flag is off while the drive is paused and on while the arrival card shows. The
-  destination is the last point of the route line.
+- A paused drive is sent as no drive: the device clears its line and pin on any inactive
+  STATE, and they are sent again on resume. The active flag stays on while the arrival card
+  shows. The destination is the last point of the route line.
+- The limit is the one the phone's own badge shows (`speedLimitKmh ?: speedLimitOverlayKmh` in
+  `MapUiState`), passed through `DeviceBridge` because the service cannot read the view model.
+  It is rounded in the units `Units.imperial` selects, and those units are what the device's
+  speedometer uses. With the phone's map screen gone the limit is unknown.
 - The route line is thinned by Douglas-Peucker to 512 points, the device's buffer, with a
   tolerance that doubles from 5 m. A route swap (reroute, faster route, added stop) is detected by
   object identity and sends the new line.
