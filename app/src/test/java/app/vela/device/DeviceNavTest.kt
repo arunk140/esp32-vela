@@ -148,15 +148,15 @@ class DeviceNavTest {
     }
 
     @Test fun phoneBatteryAndClock() {
-        val p = ByteBuffer.wrap(DeviceNavEncoder.phone(50, charging = true, epochS = 1_791_000_000L, utcOffsetMin = -420))
+        val p = ByteBuffer.wrap(DeviceNavEncoder.phone(50, charging = true, clock24 = true, epochS = 1_791_000_000L, utcOffsetMin = -420))
             .order(ByteOrder.LITTLE_ENDIAN)
         assertEquals(12, p.capacity())
         assertEquals(0x07, p.get(0).toInt())
         assertEquals(50, p.get(1).toInt())
-        assertEquals(1, p.get(2).toInt())
+        assertEquals(3, p.get(2).toInt()) // charging, 24-hour clock
         assertEquals(1_791_000_000, p.getInt(4))
         assertEquals(-420, p.getShort(8).toInt())
-        assertEquals(0xFF, DeviceNavEncoder.phone(null, false, 0, 0)[1].toInt() and 0xFF)
+        assertEquals(0xFF, DeviceNavEncoder.phone(null, false, false, 0, 0)[1].toInt() and 0xFF)
     }
 
     @Test fun limitCarriesItsUnits() {

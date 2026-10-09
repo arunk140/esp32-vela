@@ -216,13 +216,13 @@ class DeviceNavEncoder(private val out: Out) {
             return b.array()
         }
 
-        /** 12 bytes: type, battery percent (0xFF unknown), flags (bit 0 charging), 0, u32 Unix
-         *  seconds, i16 minutes east of UTC, two zero bytes. */
-        fun phone(batteryPct: Int?, charging: Boolean, epochS: Long, utcOffsetMin: Int): ByteArray =
+        /** 12 bytes: type, battery percent (0xFF unknown), flags (bit 0 charging, bit 1 a
+         *  24-hour clock), 0, u32 Unix seconds, i16 minutes east of UTC, two zero bytes. */
+        fun phone(batteryPct: Int?, charging: Boolean, clock24: Boolean, epochS: Long, utcOffsetMin: Int): ByteArray =
             ByteBuffer.allocate(12).order(ByteOrder.LITTLE_ENDIAN).apply {
                 put(PHONE)
                 put((batteryPct?.coerceIn(0, 100) ?: 0xFF).toByte())
-                put(if (charging) 1 else 0)
+                put(((if (charging) 1 else 0) or (if (clock24) 2 else 0)).toByte())
                 put(0)
                 putInt((epochS and 0xFFFFFFFFL).toInt())
                 putShort(utcOffsetMin.toShort())

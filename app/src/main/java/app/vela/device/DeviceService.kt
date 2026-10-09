@@ -85,6 +85,7 @@ class DeviceService : Service() {
     private var roadsJob: Job? = null
     private var roadsRetryAt = 0L
     private var ticks = 0
+    private var sentClock24: Boolean? = null
 
     private val encoder = DeviceNavEncoder(object : DeviceNavEncoder.Out {
         override fun navWrite(data: ByteArray, tag: String?) { link?.writeNav(data, tag) }
@@ -374,7 +375,8 @@ class DeviceService : Service() {
                 pushNav(navSession.state.value)
                 // The display mode can be switched on the device by a long press.
                 if (++ticks % STATUS_EVERY_TICKS == 0) link?.readStatus()
-                if (ticks % PHONE_EVERY_TICKS == 1) pushPhone()
+                // Every half minute, and at once when the 12 or 24 hour choice changes.
+                if (ticks % PHONE_EVERY_TICKS == 1 || app.vela.ui.Clock24.on.value != sentClock24) pushPhone()
             }
         }
     }
@@ -419,6 +421,8 @@ class DeviceService : Service() {
                 batteryPct = if (level >= 0 && scale > 0) level * 100 / scale else null,
                 charging = status == android.os.BatteryManager.BATTERY_STATUS_CHARGING ||
                     status == android.os.BatteryManager.BATTERY_STATUS_FULL,
+                // Settings > Appearance > Clock: the device shows its times the same way.
+                clock24 = app.vela.ui.Clock24.on.value.also { sentClock24 = it },
                 epochS = now / 1000,
                 utcOffsetMin = java.util.TimeZone.getDefault().getOffset(now) / 60_000,
             ),
