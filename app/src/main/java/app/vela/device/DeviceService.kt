@@ -25,7 +25,9 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import app.vela.MainActivity
 import app.vela.R
+import app.vela.core.data.naming.RoadNameTiles
 import app.vela.core.location.LocationProvider
+import app.vela.core.model.distanceTo
 import app.vela.core.model.Route
 import app.vela.core.nav.NavSession
 import app.vela.core.nav.RouteProjection
@@ -77,6 +79,12 @@ class DeviceService : Service() {
     private var cum = DoubleArray(0)
     /** The last course worth showing, held while stopped so the device map does not spin. */
     private var course = 0f
+
+    /** Where the streets the device holds are centered, and when to try again after a miss. */
+    private var roadsCenter: app.vela.core.model.LatLng? = null
+    private var roadsJob: Job? = null
+    private var roadsRetryAt = 0L
+    private var ticks = 0
 
     private val encoder = DeviceNavEncoder(object : DeviceNavEncoder.Out {
         override fun navWrite(data: ByteArray, tag: String?) { link?.writeNav(data, tag) }
@@ -227,6 +235,8 @@ class DeviceService : Service() {
                 encoder.reset()
                 routeSent = false
                 sentRoute = null
+                roadsJob?.cancel()
+                roadsCenter = null
                 media?.stop()
                 calls?.stop()
             }
@@ -296,6 +306,35 @@ class DeviceService : Service() {
                 nowMs = System.currentTimeMillis(),
             ),
         )
+        maybeSendRoads(app.vela.core.model.LatLng(loc.latitude, loc.longitude))
+    }
+
+    /**
+     * The streets around [here], for the minimal display only: the map display has tiles of
+     * its own. Sent again every [DeviceRoads.REFRESH_M] of travel. The tiles are the ones the
+     * map draws, from a downloaded region when there is one and the tile host otherwise, so
+     * with no connection and no download the device simply shows none.
+     */
+    private fun maybeSendRoads(here: app.vela.core.model.LatLng) {
+        if (!DeviceLinkPrefs.minimal.value || link?.mediaReady != true) return
+        if (roadsJob?.isActive == true) return
+        val last = roadsCenter
+        if (last != null && last.distanceTo(here) < DeviceRoads.REFRESH_M) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now < roadsRetryAt) return
+        roadsJob = scope.launch {
+            val chunks = withContext(Dispatchers.Default) {
+                RoadNameTiles.linesAlong(DeviceRoads.probe(here))?.let { DeviceRoads.chunks(here, it) }
+            }
+            if (chunks == null) {
+                roadsRetryAt = android.os.SystemClock.elapsedRealtime() + ROADS_RETRY_MS
+                return@launch
+            }
+            val l = link ?: return@launch
+            if (!l.mediaReady) return@launch
+            chunks.forEach { l.writeNav(it, null) }
+            roadsCenter = here
+        }
     }
 
     /**
@@ -328,6 +367,8 @@ class DeviceService : Service() {
             while (isActive) {
                 delay(STATE_REPEAT_MS)
                 pushNav(navSession.state.value)
+                // The display mode can be switched on the device by a long press.
+                if (++ticks % STATUS_EVERY_TICKS == 0) link?.readStatus()
             }
         }
     }
@@ -443,6 +484,8 @@ class DeviceService : Service() {
         private const val CHANNEL_ID = "vela_device"
         private const val NOTIF_ID = 44
         private const val STATE_REPEAT_MS = 1_000L
+        private const val STATUS_EVERY_TICKS = 5
+        private const val ROADS_RETRY_MS = 30_000L
         /** A fix looser than this is sent as "no fix", and the device grays its marker. */
         private const val FIX_ACCURACY_M = 50f
         /** Below this speed a GPS course is not trusted. */
