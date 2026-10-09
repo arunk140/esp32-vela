@@ -117,6 +117,10 @@ class VelaApp : Application(), coil.ImageLoaderFactory {
         app.vela.offline.StorageLocation.init(this)
         app.vela.offline.RoadNameTileSource.install(this) // street names for LineNamer (issue #478)
         Units.init(this)
+        // The paired nav device, and its link if one is paired and switched on. A launch the
+        // system will not let start a service from is retried when the map comes to the front.
+        app.vela.device.DeviceLinkPrefs.init(this)
+        app.vela.device.DeviceService.start(this)
         // The desktop window size Google's requests describe: picked once per install, then kept
         // (a size that changed per launch would be its own oddity). See BrowserViewport.
         run {
