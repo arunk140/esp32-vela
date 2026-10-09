@@ -4723,6 +4723,15 @@ longer than 58 points is sent as pieces that share an end point. The tiles come 
 downloaded basemap when it holds them and from the tile host otherwise; a miss is retried after
 30 s. Nothing is sent while the device shows its map, which has tiles of its own.
 
+A call in an app that does not ring through the phone's call system (WhatsApp, Signal) is seen
+by `DeviceMediaListener` as a notification in the call category whose `android.callType` is 1,
+the platform's call style for a ringing incoming call. The caller is its `android.callPerson`.
+The device's answer and decline are sent to the notification's own `android.answerIntent` and
+`android.declineIntent`. Answer starts the app's call screen, so it is sent with
+`MODE_BACKGROUND_ACTIVITY_START_ALLOWED`. The ring ends when the notification is removed or its
+type changes. The default dialer's notification is skipped: the telephony listener has that call.
+Notifications outside the call category are never read.
+
 Settings > Nav device > "Simulate a call" rings the device with a made-up caller
 (`DeviceCalls.simulate`) for 20 s or until the device answers or declines. It works with the
 calls switch off, needs no permission, and never touches a real call.
