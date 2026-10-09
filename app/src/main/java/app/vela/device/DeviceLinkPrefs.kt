@@ -20,6 +20,8 @@ object DeviceLinkPrefs {
     val brightness = mutableIntStateOf(80)
     /** The device's own map theme. The device is the truth; this follows what it reports. */
     val darkMap = mutableStateOf(true)
+    /** The device shows only the route line and the next turn on black, and reads no map. */
+    val minimal = mutableStateOf(false)
     /** Show what is playing on the device and take its media buttons. Needs notification access. */
     val media = mutableStateOf(false)
     /** Show a ringing call on the device and take its answer and reject buttons. */
@@ -32,6 +34,7 @@ object DeviceLinkPrefs {
         enabled.value = p.getBoolean(KEY_ENABLED, true)
         brightness.intValue = p.getInt(KEY_BRIGHTNESS, 80)
         darkMap.value = p.getBoolean(KEY_DARK_MAP, true)
+        minimal.value = p.getBoolean(KEY_MINIMAL, false)
         media.value = p.getBoolean(KEY_MEDIA, false)
         calls.value = p.getBoolean(KEY_CALLS, false)
     }
@@ -61,6 +64,11 @@ object DeviceLinkPrefs {
         prefs(context).edit().putBoolean(KEY_DARK_MAP, dark).apply()
     }
 
+    fun setMinimal(context: Context, on: Boolean) {
+        minimal.value = on
+        prefs(context).edit().putBoolean(KEY_MINIMAL, on).apply()
+    }
+
     fun setMedia(context: Context, on: Boolean) {
         media.value = on
         prefs(context).edit().putBoolean(KEY_MEDIA, on).apply()
@@ -78,6 +86,7 @@ object DeviceLinkPrefs {
     private const val KEY_ENABLED = "enabled"
     private const val KEY_BRIGHTNESS = "brightness"
     private const val KEY_DARK_MAP = "dark_map"
+    private const val KEY_MINIMAL = "minimal"
     private const val KEY_MEDIA = "media"
     private const val KEY_CALLS = "calls"
 }

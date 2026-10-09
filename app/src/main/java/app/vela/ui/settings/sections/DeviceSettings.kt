@@ -138,6 +138,16 @@ internal fun DeviceSettingsScreen(onBack: () -> Unit) {
                 BrightnessRow()
                 GroupDivider()
                 ToggleRow(
+                    label = stringResource(R.string.device_minimal),
+                    checked = DeviceLinkPrefs.minimal.value,
+                    onCheckedChange = {
+                        DeviceLinkPrefs.setMinimal(context, it)
+                        DeviceService.pushMinimal(context)
+                    },
+                    hint = stringResource(R.string.device_minimal_hint),
+                )
+                GroupDivider()
+                ToggleRow(
                     label = stringResource(R.string.device_dark_map),
                     checked = DeviceLinkPrefs.darkMap.value,
                     onCheckedChange = {
