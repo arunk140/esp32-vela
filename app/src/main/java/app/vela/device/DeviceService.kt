@@ -199,6 +199,10 @@ class DeviceService : Service() {
                 link?.cmdSetTheme(DeviceLinkPrefs.darkMap.value)
                 return START_STICKY
             }
+            ACTION_SIMULATE_CALL -> {
+                calls?.simulate(getString(R.string.device_simulate_call_name), SIMULATED_NUMBER)
+                return START_STICKY
+            }
             ACTION_MINIMAL -> {
                 link?.cmdSetMinimal(DeviceLinkPrefs.minimal.value)
                 return START_STICKY
@@ -265,7 +269,7 @@ class DeviceService : Service() {
         override fun onCallReady() = syncBridges()
 
         override fun onCallCmd(cmd: ByteArray) {
-            if (DeviceLinkPrefs.calls.value) calls?.handle(cmd)
+            if (DeviceLinkPrefs.calls.value || calls?.simulating == true) calls?.handle(cmd)
         }
     }
 
@@ -479,6 +483,9 @@ class DeviceService : Service() {
         private const val ACTION_BRIGHTNESS = "app.vela.device.BRIGHTNESS"
         private const val ACTION_THEME = "app.vela.device.THEME"
         private const val ACTION_MINIMAL = "app.vela.device.MINIMAL"
+        private const val ACTION_SIMULATE_CALL = "app.vela.device.SIMULATE_CALL"
+        /** A number from the range set aside for fiction, in the Davis fixture's area code. */
+        private const val SIMULATED_NUMBER = "+1 530 555 0100"
         private const val ACTION_REFRESH = "app.vela.device.REFRESH"
         private const val EXTRA_FRESH = "fresh"
         private const val CHANNEL_ID = "vela_device"
@@ -521,6 +528,8 @@ class DeviceService : Service() {
         fun pushBrightness(context: Context) = send(context, ACTION_BRIGHTNESS)
         fun pushTheme(context: Context) = send(context, ACTION_THEME)
         fun pushMinimal(context: Context) = send(context, ACTION_MINIMAL)
+        /** Rings the device with a made-up caller for a few seconds. */
+        fun simulateCall(context: Context) = send(context, ACTION_SIMULATE_CALL)
         /** A switch on the settings page changed, or a permission was just granted. */
         fun refresh(context: Context) = send(context, ACTION_REFRESH)
 
