@@ -495,6 +495,17 @@ class DeviceService : Service() {
             .setShowWhen(false)
             .setContentIntent(open)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .apply {
+                // While connected, one button to put the device away: it goes to deep sleep,
+                // which drops the link. Touching the device wakes it and it connects again.
+                if (state == Link.CONNECTED) {
+                    val sleep = PendingIntent.getService(
+                        this@DeviceService, 1, Intent(this@DeviceService, DeviceService::class.java).setAction(ACTION_SLEEP),
+                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                    )
+                    addAction(0, getString(R.string.device_notif_disconnect), sleep)
+                }
+            }
             .build()
     }
 
