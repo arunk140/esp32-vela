@@ -4676,6 +4676,7 @@ Messages, all little-endian:
 | NAV DEST `0x03` | 10 | present, lat, lon | when it changes |
 | NAV ROUTE `0x04` | 4 + 8 per point | flags (start, end), sequence, count, up to 31 points | when the session's `Route` object changes |
 | NAV LIMIT `0x05` | 4 | units (0 km/h, 1 mph), posted limit in those units (0 unknown) | when either changes, and once per connection |
+| NAV TRAFFIC `0x08` | 2 + 5 per stretch | count, then start and end as fractions of the route length (0 to 65,535) and a level 1 to 3; up to 50, the worst and longest first | after each route line |
 | NAV PHONE `0x07` | 12 | battery percent (255 unknown), flags (bit 0 charging), Unix seconds, minutes east of UTC | on connecting and every 30 s |
 | NAV ROADS `0x06` | up to 252 | flags (start, end), sequence, an origin in the first chunk, then records of count, class and points as 16-bit offsets in 1e-5 degrees | every 250 m of travel, while the minimal display is on |
 
@@ -4693,6 +4694,10 @@ Messages, all little-endian:
   `MapUiState`), passed through `DeviceBridge` because the service cannot read the view model.
   It is rounded in the units `Units.imperial` selects, and those units are what the device's
   speedometer uses. With the phone's map screen gone the limit is unknown.
+- Congestion is `Route.trafficSpans`, sent as fractions of `Route.distanceMeters` because the
+  device lays it on its own thinned line. It follows the route line in the same batch of writes,
+  and a traffic recheck that swaps the `Route` object sends both again. A route with no live
+  traffic sends a count of 0.
 - The route line is thinned by Douglas-Peucker to 512 points, the device's buffer, with a
   tolerance that doubles from 5 m. A route swap (reroute, faster route, added stop) is detected by
   object identity and sends the new line.
