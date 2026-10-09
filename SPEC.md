@@ -4677,7 +4677,7 @@ Messages, all little-endian:
 | NAV ROUTE `0x04` | 4 + 8 per point | flags (start, end), sequence, count, up to 31 points | when the session's `Route` object changes |
 | NAV LIMIT `0x05` | 4 | units (0 km/h, 1 mph), posted limit in those units (0 unknown) | when either changes, and once per connection |
 | NAV TRAFFIC `0x08` | 2 + 5 per stretch | count, then start and end as fractions of the route length (0 to 65,535) and a level 1 to 3; up to 50, the worst and longest first | after each route line |
-| NAV PHONE `0x07` | 12 | battery percent (255 unknown), flags (bit 0 charging), Unix seconds, minutes east of UTC | on connecting and every 30 s |
+| NAV PHONE `0x07` | 12 | battery percent (255 unknown), flags (bit 0 charging, bit 1 `Clock24.on`), Unix seconds, minutes east of UTC | on connecting, every 30 s, and when the clock choice changes |
 | NAV ROADS `0x06` | up to 252 | flags (start, end), sequence, an origin in the first chunk, then records of count, class and points as 16-bit offsets in 1e-5 degrees | every 250 m of travel, while the minimal display is on |
 
 - STATE repeats every second because `NavSession.state` does not emit while nothing changes, and
