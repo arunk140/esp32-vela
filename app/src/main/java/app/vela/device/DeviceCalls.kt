@@ -59,6 +59,7 @@ class DeviceCalls(private val ctx: Context, private val out: Out) {
         private const val NAME_MAX = 48
         private const val NUMBER_MAX = 32
         private const val SIMULATION_MS = 20_000L
+        private const val ANSWER_CHECK_MS = 2_000L
 
         /** The bridge that is listening for calls, for the notification listener to tell
          *  about one ringing in another app. Null while "Incoming calls" is off or the device
@@ -128,6 +129,18 @@ class DeviceCalls(private val ctx: Context, private val out: Out) {
         sendEnd()
     }
 
+    /**
+     * Answers a call ringing in another app by pressing its notification's Answer, and notes
+     * in the log when the call is still ringing afterward: with the phone locked, Android can
+     * refuse to let a background app open the other app's call screen.
+     */
+    private fun answerAppCall(call: AppCall) {
+        press(call.answer, "answer")
+        main.postDelayed({
+            if (appCall?.key == call.key) Log.w(TAG, "app call answer did not take: still ringing")
+        }, ANSWER_CHECK_MS)
+    }
+
     /** Presses the notification's own button. Answer opens the app's call screen, which
      *  Android lets a background app do only with leave from both sides: this is ours. */
     private fun press(intent: android.app.PendingIntent?, what: String) {
@@ -135,10 +148,17 @@ class DeviceCalls(private val ctx: Context, private val out: Out) {
             Log.w(TAG, "app call $what: the notification has no such action")
             return
         }
+        // From Android 16 "allowed" only lends the privilege of being visible, which a phone
+        // in a pocket never is. "Allow always" lends every privilege Vela holds, among them
+        // "Display over other apps", the one that counts from the background.
         val options = if (Build.VERSION.SDK_INT >= 34) {
             android.app.ActivityOptions.makeBasic().apply {
-                pendingIntentBackgroundActivityStartMode =
+                pendingIntentBackgroundActivityStartMode = if (Build.VERSION.SDK_INT >= 36) {
+                    android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS
+                } else {
+                    @Suppress("DEPRECATION")
                     android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                }
             }.toBundle()
         } else null
         runCatching { intent.send(ctx, 0, null, null, null, null, options) }
@@ -247,7 +267,7 @@ class DeviceCalls(private val ctx: Context, private val out: Out) {
         }
         appCall?.let { call ->
             when (cmd[0].toInt()) {
-                CMD_ANSWER -> press(call.answer, "answer")
+                CMD_ANSWER -> answerAppCall(call)
                 CMD_REJECT -> press(call.decline, "decline")
             }
             return
