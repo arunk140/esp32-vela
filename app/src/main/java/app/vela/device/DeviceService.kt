@@ -239,6 +239,7 @@ class DeviceService : Service() {
                 encoder.reset()
                 routeSent = false
                 sentRoute = null
+                ticks = 0 // the phone's battery and clock go out on the first tick of a link
                 roadsJob?.cancel()
                 roadsCenter = null
                 media?.stop()
@@ -373,6 +374,7 @@ class DeviceService : Service() {
                 pushNav(navSession.state.value)
                 // The display mode can be switched on the device by a long press.
                 if (++ticks % STATUS_EVERY_TICKS == 0) link?.readStatus()
+                if (ticks % PHONE_EVERY_TICKS == 1) pushPhone()
             }
         }
     }
@@ -397,6 +399,28 @@ class DeviceService : Service() {
             }
             encoder.sendRoute(chunks)
         }
+    }
+
+    /** The phone's battery and clock, for the device's battery face and its arrival time. */
+    private fun pushPhone() {
+        val l = link ?: return
+        if (!l.mediaReady) return
+        // The battery broadcast is sticky: asking with no receiver returns the last one.
+        val battery = runCatching { registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) }.getOrNull()
+        val level = battery?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = battery?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1) ?: -1
+        val status = battery?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1) ?: -1
+        val now = System.currentTimeMillis()
+        l.writeNav(
+            DeviceNavEncoder.phone(
+                batteryPct = if (level >= 0 && scale > 0) level * 100 / scale else null,
+                charging = status == android.os.BatteryManager.BATTERY_STATUS_CHARGING ||
+                    status == android.os.BatteryManager.BATTERY_STATUS_FULL,
+                epochS = now / 1000,
+                utcOffsetMin = java.util.TimeZone.getDefault().getOffset(now) / 60_000,
+            ),
+            "navphone",
+        )
     }
 
     // ---- state shown to the user ----
@@ -492,6 +516,7 @@ class DeviceService : Service() {
         private const val NOTIF_ID = 44
         private const val STATE_REPEAT_MS = 1_000L
         private const val STATUS_EVERY_TICKS = 5
+        private const val PHONE_EVERY_TICKS = 30
         private const val ROADS_RETRY_MS = 30_000L
         /** A fix looser than this is sent as "no fix", and the device grays its marker. */
         private const val FIX_ACCURACY_M = 50f

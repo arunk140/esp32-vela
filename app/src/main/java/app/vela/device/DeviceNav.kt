@@ -156,7 +156,10 @@ class DeviceNavEncoder(private val out: Out) {
         private const val DEST: Byte = 0x03
         private const val ROUTE: Byte = 0x04
         private const val LIMIT: Byte = 0x05
+        private const val PHONE: Byte = 0x07
         private const val F_ACTIVE = 0x01
+        /** `NAV_F_REM_10M`: the remaining distance is in units of 10 m. */
+        private const val F_REM_10M = 0x04
         private const val ROUTE_F_START = 0x01
         private const val ROUTE_F_END = 0x02
         /** `NAV_TEXT_MAX`, in bytes. */
@@ -170,17 +173,31 @@ class DeviceNavEncoder(private val out: Out) {
         private fun e7(deg: Double) = Math.round(deg * 1e7).toInt()
 
         /** 12 bytes: type, flags, maneuver, u16 dist, after maneuver, u16 after dist, u16
-         *  remaining m, u16 remaining s. Little-endian. */
+         *  remaining distance in units of 10 m (flag [F_REM_10M], which reaches 655 km), u16
+         *  remaining s. Little-endian. */
         fun state(f: DeviceNavFrame): ByteArray =
             ByteBuffer.allocate(12).order(ByteOrder.LITTLE_ENDIAN).apply {
                 put(STATE)
-                put((if (f.active) F_ACTIVE else 0).toByte())
+                put(((if (f.active) F_ACTIVE else 0) or F_REM_10M).toByte())
                 put(f.maneuver.toByte())
                 putShort(u16(f.distanceM))
                 put(f.afterManeuver.toByte())
                 putShort(u16(f.afterDistanceM))
-                putShort(u16(f.remainingM))
+                putShort(u16((f.remainingM + 5) / 10))
                 putShort(u16(f.remainingS))
+            }.array()
+
+        /** 12 bytes: type, battery percent (0xFF unknown), flags (bit 0 charging), 0, u32 Unix
+         *  seconds, i16 minutes east of UTC, two zero bytes. */
+        fun phone(batteryPct: Int?, charging: Boolean, epochS: Long, utcOffsetMin: Int): ByteArray =
+            ByteBuffer.allocate(12).order(ByteOrder.LITTLE_ENDIAN).apply {
+                put(PHONE)
+                put((batteryPct?.coerceIn(0, 100) ?: 0xFF).toByte())
+                put(if (charging) 1 else 0)
+                put(0)
+                putInt((epochS and 0xFFFFFFFFL).toInt())
+                putShort(utcOffsetMin.toShort())
+                putShort(0)
             }.array()
 
         /** Type, length, then UTF-8 cut at a character boundary inside [TEXT_MAX] bytes. */
