@@ -268,6 +268,8 @@ What Vela Maps does today, one line per feature. How each one works is in [SPEC.
   and volume.
 - With "Incoming calls" on, it shows who is calling, and its buttons answer or reject.
 - Set the device's brightness and map theme, send it to sleep, or unpair it from the same page.
+- Switch the device to a minimal display: a black screen with the route line, the next turn and
+  trip progress, which reads no map and saves power.
 
 ## Phones without a touchscreen
 

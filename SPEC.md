@@ -4701,6 +4701,13 @@ cover from the bitmap the player publishes (never fetched from a URL), position 
 takes play, skip and volume commands back. Calls sends the caller's name and number while a call
 rings and takes answer and reject back.
 
+Commands are one opcode byte and its arguments, written to CMD: unpair `0x04`, brightness
+`0x05` (0 to 100), pair `0x06` (the six digits), sleep `0x07`, map theme `0x08`, minimal display
+`0x09`. STATUS is read once per connection: battery mV (u16), link, frames per second, map
+theme, and from firmware with the minimal display a sixth byte for it. The device is the truth
+for the theme and the display mode, since both can be changed on it, so the switches follow what
+STATUS reports.
+
 No log line in `app/device/` carries a coordinate, a street, a track, a caller or the device's
 address.
 
