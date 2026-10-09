@@ -22,3 +22,8 @@
 -keepclassmembers class <1> {
     static <1>$Companion Companion;
 }
+
+# The nav device's QR scanner (ML Kit). Its parts are found by name and built by reflection, and
+# the library's own rule keeps the classes but not their constructors, which R8 then removes:
+# the scanner comes back null and opening the pairing camera crashes.
+-keep class * implements com.google.firebase.components.ComponentRegistrar { <init>(); }
