@@ -36,6 +36,11 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+    <!-- Answering a WhatsApp-style call from the device while the phone is locked: the answer
+         opens that app's call screen, which Android lets a background app do only if it may
+         draw over other apps. Vela draws nothing over anything. Granted by the user on a system
+         page, offered under the Incoming calls switch. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <uses-feature android:name="android.hardware.telephony" android:required="false" />

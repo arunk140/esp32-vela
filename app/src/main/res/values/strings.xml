@@ -1406,6 +1406,9 @@
     <string name="device_media_hint">The track, its cover and the volume, with the device\'s buttons controlling playback. Needs notification access, which Android grants on its own page.</string>
     <string name="device_calls">Incoming calls</string>
     <string name="device_calls_hint">Who is calling, with buttons on the device to answer or decline. Needs the phone, call log and contacts permissions. Calls in WhatsApp and similar apps also need notification access.</string>
+    <string name="device_calls_locked">Answer app calls while the phone is locked</string>
+    <string name="device_calls_locked_hint">Answering a WhatsApp call from the device opens WhatsApp\'s call screen. With the phone locked, Android only allows that if Vela may display over other apps. Vela shows nothing over other apps. Declining works without it.</string>
+    <string name="device_calls_locked_action">Allow</string>
     <string name="device_simulate_call">Simulate a call</string>
     <string name="device_simulate_call_hint">Rings the device with a made-up caller for 20 seconds, or until you answer or decline on it. No real call is made.</string>
     <string name="device_simulate_call_name">Test Caller</string>
