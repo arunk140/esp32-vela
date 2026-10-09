@@ -246,11 +246,18 @@ class DeviceNavTest {
 
         // A road with no name falls back to its number.
         assertEquals("CA 113", DeviceNavFrame.of(driving.copy(nav = NavState(stepIndex = 2))).street)
+        // With neither, the last step names the place, and any other step shows its instruction.
+        val named = driving.copy(destinationLabel = "Davis Farmers Market")
+        assertEquals("Davis Farmers Market", DeviceNavFrame.of(named.copy(nav = NavState(stepIndex = 3))).street)
+        val bare = route(Maneuver(ManeuverType.FORK_LEFT, " Keep left at the fork ", davis, 300.0, 20.0), step(ManeuverType.ARRIVE, null, 0.0))
+        assertEquals("Keep left at the fork", DeviceNavFrame.of(driving.copy(route = bare, nav = NavState(stepIndex = 0))).street)
+        assertEquals("", DeviceNavFrame.of(driving.copy(route = bare, nav = NavState(stepIndex = 1))).street)
         assertEquals(DeviceManeuver.OFF_ROUTE, DeviceNavFrame.of(driving.copy(nav = NavState(stepIndex = 1, offRoute = true))).maneuver)
 
         // The device clears its line on any inactive frame, so a paused drive is no drive.
         assertEquals(DeviceNavFrame.IDLE, DeviceNavFrame.of(driving.copy(paused = true)))
 
+        assertEquals("Davis Farmers Market", DeviceNavFrame.of(named.copy(navigating = false, arrived = true)).street)
         val arrived = DeviceNavFrame.of(driving.copy(navigating = false, arrived = true))
         assertTrue(arrived.active)
         assertEquals(DeviceManeuver.ARRIVE, arrived.maneuver)
