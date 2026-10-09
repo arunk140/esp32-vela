@@ -121,6 +121,56 @@ class DeviceNavTest {
         assertArrayEquals(byteArrayOf(0x05, 0, 0, 0), DeviceNavEncoder.limit(imperial = false, limit = 0))
     }
 
+    @Test fun streetsArePackedAroundAnOrigin() {
+        fun line(cls: String, vararg p: LatLng) = app.vela.core.data.naming.NamedLine("x", null, cls, p.toList())
+        val near = line("minor", davis, LatLng(davis.lat, davis.lng + 0.001))
+        val far = line("primary", LatLng(davis.lat + 0.5, davis.lng), LatLng(davis.lat + 0.6, davis.lng))
+        val path = line("path", davis, LatLng(davis.lat + 0.001, davis.lng))
+        val long = line("primary", *Array(150) { LatLng(davis.lat - 0.004 + it * 0.00005, davis.lng + (if (it % 2 == 0) 0.0 else 0.001)) })
+
+        val chunks = DeviceRoads.chunks(davis, listOf(near, far, path, long))
+        val first = ByteBuffer.wrap(chunks[0]).order(ByteOrder.LITTLE_ENDIAN)
+        assertEquals(0x06, first.get(0).toInt())
+        assertEquals(385449000, first.getInt(4))
+        assertEquals(-1217405000, first.getInt(8))
+        var lines = 0
+        var points = 0
+        var majors = 0
+        chunks.forEachIndexed { i, c ->
+            assertTrue(c.size <= 252)
+            assertEquals(i, c[2].toInt())
+            assertEquals("start flag", i == 0, c[1].toInt() and 0x01 != 0)
+            assertEquals("end flag", i == chunks.lastIndex, c[1].toInt() and 0x02 != 0)
+            var o = if (i == 0) 12 else 4
+            while (o < c.size) {
+                val n = c[o].toInt()
+                assertTrue(n in 2..60)
+                majors += c[o + 1].toInt()
+                lines++
+                points += n
+                o += 2 + n * 4
+            }
+            assertEquals(c.size, o)
+        }
+        // The near street whole, the long one in three pieces, nothing far away and no path.
+        assertEquals(4, lines)
+        assertEquals(3, majors)
+        assertEquals(2 + 150 + 2, points)
+        // The near street runs from the origin to 100 units of 1e-5 degrees east of it.
+        val b = ByteBuffer.wrap(chunks[0]).order(ByteOrder.LITTLE_ENDIAN)
+        assertEquals(2, b.get(12).toInt())
+        assertEquals(0, b.get(13).toInt())
+        assertEquals(0, b.getShort(14).toInt())
+        assertEquals(0, b.getShort(16).toInt())
+        assertEquals(0, b.getShort(18).toInt())
+        assertEquals(100, b.getShort(20).toInt())
+
+        assertArrayEquals(
+            byteArrayOf(0x06, 0x03, 0, 0) + chunks[0].copyOfRange(4, 12),
+            DeviceRoads.chunks(davis, emptyList()).single(),
+        )
+    }
+
     @Test fun noLineIsOneClearingChunk() {
         assertArrayEquals(byteArrayOf(0x04, 0x03, 0, 0), DeviceNavEncoder.routeChunks(emptyList()).single())
     }

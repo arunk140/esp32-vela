@@ -279,6 +279,10 @@ object RouteSimplify {
         return thinned
     }
 
+    /** Douglas-Peucker: drops points that sit within [epsM] meters of the line through
+     *  their neighbors. */
+    fun thin(points: List<LatLng>, epsM: Double): List<LatLng> = reduce(points, epsM)
+
     private fun reduce(points: List<LatLng>, epsM: Double): List<LatLng> {
         if (points.size < 3) return points
         val keep = BooleanArray(points.size)

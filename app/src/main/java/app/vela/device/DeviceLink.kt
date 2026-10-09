@@ -466,6 +466,13 @@ class DeviceLink(private val ctx: Context, private val cb: Cb) {
     fun cmdSetTheme(dark: Boolean) =
         writeCmd(byteArrayOf(CMD_SET_THEME, if (dark) 1 else 0))
 
+    /** Asks the device for its status again: its theme and display mode can be changed on
+     *  the device itself, and it does not announce that. */
+    fun readStatus() {
+        if (gatt == null) return
+        handler.post { if (chr(STATUS_UUID) != null) enqueue(Op.Read(UUID.fromString(STATUS_UUID))) }
+    }
+
     fun cmdSetMinimal(on: Boolean) =
         writeCmd(byteArrayOf(CMD_SET_MINIMAL, if (on) 1 else 0))
 
