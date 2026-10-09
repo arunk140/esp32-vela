@@ -5792,8 +5792,14 @@ A call in an app that does not ring through the phone's call system (WhatsApp, S
 by `DeviceMediaListener` as a notification in the call category whose `android.callType` is 1,
 the platform's call style for a ringing incoming call. The caller is its `android.callPerson`.
 The device's answer and decline are sent to the notification's own `android.answerIntent` and
-`android.declineIntent`. Answer starts the app's call screen, so it is sent with
-`MODE_BACKGROUND_ACTIVITY_START_ALLOWED`. The ring ends when the notification is removed or its
+`android.declineIntent`. Decline is not an activity and needs nothing. Answer starts the app's
+call screen, which Android blocks from a background app (`BAL_BLOCK`) unless two things hold.
+Vela holds "Display over other apps" (`SYSTEM_ALERT_WINDOW`), which the settings page offers
+under the calls switch; Vela draws no overlay. And the send asks for
+`MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS` on Android 16 and later: there the older
+`..._ALLOWED` lends only the privilege of being visible, so the permission does not count and a
+locked phone never answers. With both, the start is allowed as `BAL_ALLOW_SAW_PERMISSION`,
+measured on Android 17 with the keyguard showing. The ring ends when the notification is removed or its
 type changes. The default dialer's notification is skipped: the telephony listener has that call.
 Notifications outside the call category are never read.
 

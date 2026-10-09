@@ -191,6 +191,36 @@ internal fun DeviceSettingsScreen(onBack: () -> Unit) {
                     },
                     hint = stringResource(R.string.device_calls_hint),
                 )
+                // Answering a call in another app opens that app's call screen. With the phone
+                // locked, Android only lets Vela do that if it may display over other apps.
+                var mayOpen by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+                androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+                    mayOpen = Settings.canDrawOverlays(context)
+                    onPauseOrDispose { }
+                }
+                if (DeviceLinkPrefs.calls.value && !mayOpen) {
+                    GroupDivider()
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+                        Text(stringResource(R.string.device_calls_locked), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            stringResource(R.string.device_calls_locked_hint),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                        FilledTonalButton(
+                            modifier = Modifier.padding(top = 8.dp).dpadHighlight(ButtonDefaults.filledTonalShape),
+                            onClick = {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:${context.packageName}"))
+                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                                    )
+                                }
+                            },
+                        ) { Text(stringResource(R.string.device_calls_locked_action)) }
+                    }
+                }
                 GroupDivider()
                 // Works with the switch off too: it shows what the device does with a call.
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
