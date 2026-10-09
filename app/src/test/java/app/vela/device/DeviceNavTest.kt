@@ -9,8 +9,6 @@ import app.vela.core.nav.NavSession
 import app.vela.core.nav.NavState
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -117,6 +115,12 @@ class DeviceNavTest {
         assertEquals(thin.size, points)
     }
 
+    @Test fun limitCarriesItsUnits() {
+        assertArrayEquals(byteArrayOf(0x05, 0, 100, 0), DeviceNavEncoder.limit(imperial = false, limit = 100))
+        assertArrayEquals(byteArrayOf(0x05, 1, 65, 0), DeviceNavEncoder.limit(imperial = true, limit = 65))
+        assertArrayEquals(byteArrayOf(0x05, 0, 0, 0), DeviceNavEncoder.limit(imperial = false, limit = 0))
+    }
+
     @Test fun noLineIsOneClearingChunk() {
         assertArrayEquals(byteArrayOf(0x04, 0x03, 0, 0), DeviceNavEncoder.routeChunks(emptyList()).single())
     }
@@ -150,9 +154,8 @@ class DeviceNavTest {
         assertEquals("CA 113", DeviceNavFrame.of(driving.copy(nav = NavState(stepIndex = 2))).street)
         assertEquals(DeviceManeuver.OFF_ROUTE, DeviceNavFrame.of(driving.copy(nav = NavState(stepIndex = 1, offRoute = true))).maneuver)
 
-        val paused = DeviceNavFrame.of(driving.copy(paused = true))
-        assertFalse(paused.active)
-        assertNotNull(paused.dest)
+        // The device clears its line on any inactive frame, so a paused drive is no drive.
+        assertEquals(DeviceNavFrame.IDLE, DeviceNavFrame.of(driving.copy(paused = true)))
 
         val arrived = DeviceNavFrame.of(driving.copy(navigating = false, arrived = true))
         assertTrue(arrived.active)
