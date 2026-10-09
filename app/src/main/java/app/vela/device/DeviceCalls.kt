@@ -60,6 +60,12 @@ class DeviceCalls(private val ctx: Context, private val out: Out) {
         private const val NUMBER_MAX = 32
         private const val SIMULATION_MS = 20_000L
 
+        /** The bridge that is listening for calls, for the notification listener to tell
+         *  about one ringing in another app. Null while "Incoming calls" is off or the device
+         *  is not connected. Main thread only. */
+        private var current: DeviceCalls? = null
+        val running: DeviceCalls? get() = current
+
         // Also the set the settings page asks for.
         val PERMISSIONS = arrayOf(
             Manifest.permission.READ_PHONE_STATE,
@@ -87,9 +93,63 @@ class DeviceCalls(private val ctx: Context, private val out: Out) {
         }
     }
 
+    /** A call ringing in another app, as its notification describes it. */
+    class AppCall(
+        val key: String,
+        val pkg: String,
+        val name: String,
+        val answer: android.app.PendingIntent?,
+        val decline: android.app.PendingIntent?,
+    )
+
+    private var appCall: AppCall? = null
+
+    /**
+     * A call is ringing in an app that does not use the phone's call system. The phone's own
+     * dialer posts the same kind of notification for an ordinary call, which [onState] already
+     * handles, so that one is left alone.
+     */
+    fun onAppCallRinging(call: AppCall) {
+        if (!running || simulating) return
+        if (lastState == TelephonyManager.CALL_STATE_RINGING) return
+        if (call.pkg == runCatching { telecom.defaultDialerPackage }.getOrNull()) return
+        // The app updates the notification while it rings: one ring per call.
+        val known = appCall?.key == call.key
+        appCall = call
+        if (known) return
+        Log.i(TAG, "app call ringing")
+        sendRing(call.name, "")
+    }
+
+    fun onAppCallEnded(key: String) {
+        if (appCall?.key != key) return
+        appCall = null
+        Log.i(TAG, "app call ended")
+        sendEnd()
+    }
+
+    /** Presses the notification's own button. Answer opens the app's call screen, which
+     *  Android lets a background app do only with leave from both sides: this is ours. */
+    private fun press(intent: android.app.PendingIntent?, what: String) {
+        if (intent == null) {
+            Log.w(TAG, "app call $what: the notification has no such action")
+            return
+        }
+        val options = if (Build.VERSION.SDK_INT >= 34) {
+            android.app.ActivityOptions.makeBasic().apply {
+                pendingIntentBackgroundActivityStartMode =
+                    android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+            }.toBundle()
+        } else null
+        runCatching { intent.send(ctx, 0, null, null, null, null, options) }
+            .onSuccess { Log.i(TAG, "app call $what sent") }
+            .onFailure { Log.w(TAG, "app call $what: ${it.javaClass.simpleName}") }
+    }
+
     fun start() {
         if (running) return
         running = true
+        current = this
         try {
             @Suppress("DEPRECATION")
             tm.listen(listener, PhoneStateListener.LISTEN_CALL_STATE)
@@ -102,6 +162,8 @@ class DeviceCalls(private val ctx: Context, private val out: Out) {
     fun stop() {
         if (!running) return
         running = false
+        if (current === this) current = null
+        appCall = null
         try {
             @Suppress("DEPRECATION")
             tm.listen(listener, PhoneStateListener.LISTEN_NONE)
@@ -181,6 +243,13 @@ class DeviceCalls(private val ctx: Context, private val out: Out) {
         if (cmd.isEmpty()) return
         if (simulating) {
             stopSimulation()
+            return
+        }
+        appCall?.let { call ->
+            when (cmd[0].toInt()) {
+                CMD_ANSWER -> press(call.answer, "answer")
+                CMD_REJECT -> press(call.decline, "decline")
+            }
             return
         }
         when (cmd[0].toInt()) {
