@@ -2,6 +2,8 @@ package app.vela.device
 
 import app.vela.core.model.LatLng
 import app.vela.core.model.ManeuverType
+import app.vela.core.model.Route
+import app.vela.core.model.TrafficSpan
 import app.vela.core.nav.NavSession
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -157,6 +159,9 @@ class DeviceNavEncoder(private val out: Out) {
         private const val ROUTE: Byte = 0x04
         private const val LIMIT: Byte = 0x05
         private const val PHONE: Byte = 0x07
+        private const val TRAFFIC: Byte = 0x08
+        /** `NAV_TRAFFIC_MAX`. */
+        const val TRAFFIC_MAX = 50
         private const val F_ACTIVE = 0x01
         /** `NAV_F_REM_10M`: the remaining distance is in units of 10 m. */
         private const val F_REM_10M = 0x04
@@ -186,6 +191,30 @@ class DeviceNavEncoder(private val out: Out) {
                 putShort(u16((f.remainingM + 5) / 10))
                 putShort(u16(f.remainingS))
             }.array()
+
+        /**
+         * The route's congested stretches: type, count, then per stretch u16 start and u16 end
+         * as a fraction of the route's length (0..65535) and a level (1 moderate, 2 heavy,
+         * 3 severe). The device lays them on its own thinned line, so fractions travel better
+         * than meters. With more than [TRAFFIC_MAX], the worst and longest are kept. No
+         * stretches is a count of 0, which clears the device's.
+         */
+        fun traffic(route: Route?): ByteArray {
+            val total = route?.distanceMeters ?: 0.0
+            val spans = if (route == null || total <= 0.0) emptyList() else route.trafficSpans
+                .filter { it.level >= 1 && it.lengthMeters > 0.0 }
+                .sortedWith(compareByDescending<TrafficSpan> { it.level }.thenByDescending { it.lengthMeters })
+                .take(TRAFFIC_MAX)
+                .sortedBy { it.startMeters }
+            val b = ByteBuffer.allocate(2 + spans.size * 5).order(ByteOrder.LITTLE_ENDIAN)
+            b.put(TRAFFIC).put(spans.size.toByte())
+            for (s in spans) {
+                val start = (s.startMeters / total * 65535).toInt().coerceIn(0, 65534)
+                val end = ((s.startMeters + s.lengthMeters) / total * 65535).toInt().coerceIn(start + 1, 65535)
+                b.putShort(start.toShort()).putShort(end.toShort()).put(s.level.coerceAtMost(3).toByte())
+            }
+            return b.array()
+        }
 
         /** 12 bytes: type, battery percent (0xFF unknown), flags (bit 0 charging), 0, u32 Unix
          *  seconds, i16 minutes east of UTC, two zero bytes. */
