@@ -269,8 +269,8 @@ What Vela Maps does today, one line per feature. How each one works is in [SPEC.
 - With "Incoming calls" on, it shows who is calling, and its buttons answer or reject.
 - Set the device's brightness and map theme, send it to sleep, or unpair it from the same page.
 - The device shows the posted speed limit as a road sign, and has a speedometer in your units.
-- Switch the device to a minimal display: a black screen with the route line, the next turn and
-  trip progress, which reads no map and saves power.
+- Switch the device to a minimal display: a black screen with the route line, the streets
+  around you in outline, the next turn and trip progress. It reads no map from the card.
 
 ## Phones without a touchscreen
 

@@ -4676,6 +4676,7 @@ Messages, all little-endian:
 | NAV DEST `0x03` | 10 | present, lat, lon | when it changes |
 | NAV ROUTE `0x04` | 4 + 8 per point | flags (start, end), sequence, count, up to 31 points | when the session's `Route` object changes |
 | NAV LIMIT `0x05` | 4 | units (0 km/h, 1 mph), posted limit in those units (0 unknown) | when either changes, and once per connection |
+| NAV ROADS `0x06` | up to 252 | flags (start, end), sequence, an origin in the first chunk, then records of count, class and points as 16-bit offsets in 1e-5 degrees | every 250 m of travel, while the minimal display is on |
 
 - STATE repeats every second because `NavSession.state` does not emit while nothing changes, and
   the device hides its banner after 6 s without one.
@@ -4707,10 +4708,18 @@ cover from the bitmap the player publishes (never fetched from a URL), position 
 takes play, skip and volume commands back. Calls sends the caller's name and number while a call
 rings and takes answer and reject back.
 
+Nearby streets (`DeviceRoads`) give the minimal display something around its route line. They
+are the named roads of classes motorway to minor from the map's own z14 vector tiles
+(`RoadNameTiles`, section 4), cut to a box 700 m either side of the position, thinned by
+Douglas-Peucker at 4 m, and capped at 1,400 points with the nearest streets first. A street
+longer than 58 points is sent as pieces that share an end point. The tiles come from a
+downloaded basemap when it holds them and from the tile host otherwise; a miss is retried after
+30 s. Nothing is sent while the device shows its map, which has tiles of its own.
+
 Commands are one opcode byte and its arguments, written to CMD: unpair `0x04`, brightness
 `0x05` (0 to 100), pair `0x06` (the six digits), sleep `0x07`, map theme `0x08`, minimal display
-`0x09`. STATUS is read once per connection: battery mV (u16), link, frames per second, map
-theme, and from firmware with the minimal display a sixth byte for it. The device is the truth
+`0x09`. STATUS is read on connecting and every 5 s after: battery mV (u16), link, frames per second,
+map theme, and from firmware with the minimal display a sixth byte for it. The device is the truth
 for the theme and the display mode, since both can be changed on it, so the switches follow what
 STATUS reports.
 

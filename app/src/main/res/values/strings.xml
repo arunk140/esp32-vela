@@ -1400,7 +1400,7 @@
     <string name="device_brightness_value">%1$d%%</string>
     <string name="device_dark_map">Dark map</string>
     <string name="device_minimal">Minimal display</string>
-    <string name="device_minimal_hint">A black screen with only the route line, your arrow, the next turn and how far along the trip you are. It reads no map from the card, which saves power. A long press on the device switches it too.</string>
+    <string name="device_minimal_hint">A black screen with the route line, the streets around you in outline, your arrow, the next turn and how far along the trip you are. It reads no map from the card, which saves power. A long press on the device switches it too.</string>
     <string name="device_also_show">Also show</string>
     <string name="device_media">What is playing</string>
     <string name="device_media_hint">The track, its cover and the volume, with the device\'s buttons controlling playback. Needs notification access, which Android grants on its own page.</string>
