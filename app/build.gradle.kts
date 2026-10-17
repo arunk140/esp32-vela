@@ -25,11 +25,9 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        // `-PappId=<id>` builds the app under another package name: the Android Auto ownership
-        // experiment (2026-09-22, ROADMAP "A Google Play listing") sideloads Vela under the id of
-        // an app the account once installed from Play, to learn whether Android Auto's check is
-        // Play's library record alone or also the signing certificate. Never a shipped path.
-        applicationId = (project.findProperty("appId") as String?)?.takeIf { it.isNotBlank() } ?: "app.vela"
+        // This fork installs as com.arunk140.vela so it sits beside upstream's app.vela. The code's
+        // namespace stays app.vela. `-PappId=<id>` builds under another package name.
+        applicationId = (project.findProperty("appId") as String?)?.takeIf { it.isNotBlank() } ?: "com.arunk140.vela"
         minSdk = 26
         targetSdk = 35
         // Overridable from CI: -PappVersionCode / -PappVersionName (ci.yml derives them from the
