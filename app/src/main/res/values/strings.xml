@@ -1575,4 +1575,16 @@
     <string name="device_channel_name">Nav device</string>
     <string name="device_notif_disconnect">Disconnect</string>
     <string name="device_media_listener_label">Vela nav device media</string>
+    <!-- CMF watch app-channel test (Settings > Nav device); English only while it is a test -->
+    <string name="watch_test" translatable="false">CMF watch test</string>
+    <string name="watch_test_hint" translatable="false">Checks that Vela can reach the CMF Watch Pro 2 next to Nothing X. The demo drive needs Vela Nav open on the watch.</string>
+    <string name="watch_test_run" translatable="false">Run link test</string>
+    <string name="watch_test_demo" translatable="false">Send demo drive</string>
+    <string name="watch_test_close" translatable="false">Disconnect</string>
+    <string name="watch_test_none" translatable="false">No watch picked</string>
+    <string name="watch_test_picked" translatable="false">Watch: %1$s</string>
+    <string name="watch_test_saved" translatable="false">the one picked before</string>
+    <string name="watch_test_pick" translatable="false">Pick the watch</string>
+    <string name="watch_test_no_bonded" translatable="false">No bonded Bluetooth devices</string>
+    <string name="watch_test_connected" translatable="false">connected</string>
 </resources>

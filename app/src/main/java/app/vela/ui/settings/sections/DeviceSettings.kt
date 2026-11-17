@@ -39,6 +39,7 @@ import app.vela.device.DeviceLinkPrefs
 import app.vela.device.DeviceMediaListener
 import app.vela.device.DeviceQrScanner
 import app.vela.device.DeviceService
+import app.vela.device.watch.WatchProbe
 import app.vela.ui.VelaDialog
 import app.vela.ui.dpadHighlight
 import app.vela.ui.settings.GroupDivider
@@ -256,6 +257,7 @@ internal fun DeviceSettingsScreen(onBack: () -> Unit) {
                 Hint(stringResource(R.string.device_sleep_hint))
             }
         }
+        WatchTestSection()
         Spacer(Modifier.height(24.dp))
     }
 
@@ -324,3 +326,98 @@ private fun BrightnessRow() {
 
 private fun granted(context: Context, permission: String) =
     ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+
+/**
+ * Test of the CMF watch's app channel ([WatchProbe]): a second Bluetooth client next to Nothing X,
+ * the channel key, a PING, and a made-up drive for the watch's Vela Nav app. Independent of the
+ * paired nav device above.
+ */
+@Composable
+private fun WatchTestSection() {
+    val context = LocalContext.current
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) WatchProbe.linkTest(context)
+    }
+    var picking by remember { mutableStateOf(false) }
+    var chosen by remember { mutableStateOf(WatchProbe.chosen(context)) }
+    var candidates by remember { mutableStateOf(emptyList<WatchProbe.Candidate>()) }
+    val listPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            candidates = WatchProbe.candidates(context)
+            picking = true
+        }
+    }
+    SettingsGroup(stringResource(R.string.watch_test)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+            Text(
+                stringResource(R.string.watch_test_hint),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            val name = chosen?.let { a -> candidates.firstOrNull { it.address == a }?.name }
+            Text(
+                if (chosen == null) stringResource(R.string.watch_test_none)
+                else stringResource(R.string.watch_test_picked, name ?: stringResource(R.string.watch_test_saved)),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            androidx.compose.material3.TextButton(
+                enabled = !WatchProbe.running.value,
+                onClick = {
+                    if (DeviceService.hasBluetooth(context)) {
+                        candidates = WatchProbe.candidates(context)
+                        picking = true
+                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        listPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                    }
+                },
+            ) { Text(stringResource(R.string.watch_test_pick)) }
+            if (picking) {
+                if (candidates.isEmpty()) Text(stringResource(R.string.watch_test_no_bonded))
+                candidates.forEach { c ->
+                    androidx.compose.material3.OutlinedButton(
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        onClick = {
+                            WatchProbe.close()
+                            WatchProbe.choose(context, c.address)
+                            chosen = c.address
+                            picking = false
+                        },
+                    ) {
+                        Text(c.name + if (c.connected) "  ·  " + context.getString(R.string.watch_test_connected) else "")
+                    }
+                }
+            }
+            Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                FilledTonalButton(
+                    enabled = !WatchProbe.running.value && chosen != null,
+                    modifier = Modifier.dpadHighlight(ButtonDefaults.filledTonalShape),
+                    onClick = {
+                        if (DeviceService.hasBluetooth(context)) WatchProbe.linkTest(context)
+                        else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            permission.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                        }
+                    },
+                ) { Text(stringResource(R.string.watch_test_run)) }
+                FilledTonalButton(
+                    enabled = WatchProbe.linked.value && !WatchProbe.running.value,
+                    modifier = Modifier.dpadHighlight(ButtonDefaults.filledTonalShape),
+                    onClick = { WatchProbe.demoDrive() },
+                ) { Text(stringResource(R.string.watch_test_demo)) }
+            }
+            if (WatchProbe.linked.value && !WatchProbe.running.value) {
+                androidx.compose.material3.TextButton(onClick = { WatchProbe.close() }) {
+                    Text(stringResource(R.string.watch_test_close))
+                }
+            }
+            WatchProbe.log.forEach { line ->
+                Text(
+                    line,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+    }
+}
