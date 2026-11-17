@@ -1587,4 +1587,11 @@
     <string name="watch_test_pick" translatable="false">Pick the watch</string>
     <string name="watch_test_no_bonded" translatable="false">No bonded Bluetooth devices</string>
     <string name="watch_test_connected" translatable="false">connected</string>
+    <string name="watch_show_nav" translatable="false">Show navigation on the watch</string>
+    <string name="watch_show_nav_hint" translatable="false">While a route is on, the Vela Nav watch app shows the next turn, the route and your arrival time. Open it on the watch before you drive.</string>
+    <string name="watch_channel_name" translatable="false">CMF watch</string>
+    <string name="watch_state_off" translatable="false">Off</string>
+    <string name="watch_state_connecting" translatable="false">Looking for the watch…</string>
+    <string name="watch_state_connected" translatable="false">Connected. Open Vela Nav on the watch</string>
+    <string name="watch_state_showing" translatable="false">Showing the drive on the watch</string>
 </resources>

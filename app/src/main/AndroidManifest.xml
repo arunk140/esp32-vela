@@ -245,6 +245,12 @@
             android:name=".device.DeviceService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice|location" />
+        <!-- Holds a second Bluetooth client on a CMF Watch Pro 2 (next to Nothing X) and sends the
+             drive to its Vela Nav app. The location type keeps fixes coming with the screen off. -->
+        <service
+            android:name=".device.watch.WatchService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice|location" />
         <!-- Does nothing itself. Android only lets an app read what is playing once the user
              has enabled a notification listener of its own. -->
         <service

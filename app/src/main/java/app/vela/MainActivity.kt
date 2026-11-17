@@ -160,6 +160,7 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         app.vela.ui.AppVisibility.foreground.value = true
         app.vela.device.DeviceService.start(this)
+        app.vela.device.watch.WatchService.start(this)
     }
 
     override fun onStop() {

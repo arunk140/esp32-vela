@@ -39,7 +39,9 @@ import app.vela.device.DeviceLinkPrefs
 import app.vela.device.DeviceMediaListener
 import app.vela.device.DeviceQrScanner
 import app.vela.device.DeviceService
+import app.vela.device.watch.WatchPrefs
 import app.vela.device.watch.WatchProbe
+import app.vela.device.watch.WatchService
 import app.vela.ui.VelaDialog
 import app.vela.ui.dpadHighlight
 import app.vela.ui.settings.GroupDivider
@@ -338,8 +340,12 @@ private fun WatchTestSection() {
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) WatchProbe.linkTest(context)
     }
+    val servicePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) WatchService.start(context)
+    }
     var picking by remember { mutableStateOf(false) }
-    var chosen by remember { mutableStateOf(WatchProbe.chosen(context)) }
+    remember { WatchPrefs.load(context) }
+    val chosen = WatchPrefs.address.value
     var candidates by remember { mutableStateOf(emptyList<WatchProbe.Candidate>()) }
     val listPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
@@ -379,9 +385,11 @@ private fun WatchTestSection() {
                         modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                         onClick = {
                             WatchProbe.close()
-                            WatchProbe.choose(context, c.address)
-                            chosen = c.address
+                            WatchPrefs.setAddress(context, c.address)
                             picking = false
+                            // a running link moves to the new watch
+                            WatchService.stop(context)
+                            WatchService.start(context)
                         },
                     ) {
                         Text(c.name + if (c.connected) "  ·  " + context.getString(R.string.watch_test_connected) else "")
@@ -400,7 +408,8 @@ private fun WatchTestSection() {
                     },
                 ) { Text(stringResource(R.string.watch_test_run)) }
                 FilledTonalButton(
-                    enabled = WatchProbe.linked.value && !WatchProbe.running.value,
+                    // the live link numbers its own messages: a demo between them would make gaps
+                    enabled = WatchProbe.linked.value && !WatchProbe.running.value && !WatchPrefs.enabled.value,
                     modifier = Modifier.dpadHighlight(ButtonDefaults.filledTonalShape),
                     onClick = { WatchProbe.demoDrive() },
                 ) { Text(stringResource(R.string.watch_test_demo)) }
@@ -419,5 +428,25 @@ private fun WatchTestSection() {
                 )
             }
         }
+        GroupDivider()
+        ToggleRow(
+            label = stringResource(R.string.watch_show_nav),
+            checked = WatchPrefs.enabled.value,
+            onCheckedChange = { on ->
+                if (!on) {
+                    WatchPrefs.setEnabled(context, false)
+                    WatchService.stop(context)
+                } else if (chosen != null) {
+                    WatchProbe.close()
+                    WatchPrefs.setEnabled(context, true)
+                    if (DeviceService.hasBluetooth(context)) WatchService.start(context)
+                    else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        servicePermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                    }
+                }
+            },
+            hint = if (WatchPrefs.enabled.value) stringResource(WatchService.state.value.label)
+            else stringResource(R.string.watch_show_nav_hint),
+        )
     }
 }

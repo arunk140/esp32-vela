@@ -37,7 +37,7 @@ object WatchNav {
         val progress: Int,
     )
 
-    private fun msg(kind: Char, seq: Int, body: ByteArray): ByteArray =
+    fun msg(kind: Char, seq: Int, body: ByteArray): ByteArray =
         byteArrayOf('n'.code.toByte(), '1'.code.toByte(), kind.code.toByte(), seq.toByte()) + body
 
     private fun le(n: Int) = ByteBuffer.allocate(n).order(ByteOrder.LITTLE_ENDIAN)
@@ -62,20 +62,24 @@ object WatchNav {
         return msg('T', seq, b)
     }
 
-    /** Begin, chunks of [CHUNK] points and end for a line in metres; the seq of each follows [seq]. */
-    fun route(seq: Int, id: Int, pts: List<IntArray>): List<ByteArray> {
+    /** A route line in metres as (kind, body) parts: begin, chunks of [CHUNK] points, end. Each
+     *  gets its seq with [msg] when it is sent, so a retry never skips a number. */
+    fun routeParts(id: Int, pts: List<IntArray>): List<Pair<Char, ByteArray>> {
         val max = pts.maxOfOrNull { maxOf(kotlin.math.abs(it[0]), kotlin.math.abs(it[1])) } ?: 0
         val scale = max / Short.MAX_VALUE + 1
         require(scale <= 255 && pts.size <= 512)
-        var s = seq
-        val out = ArrayList<ByteArray>()
-        out += msg('B', s++, le(4).put(id.toByte()).putShort(pts.size.toShort()).put(scale.toByte()).array())
+        val out = ArrayList<Pair<Char, ByteArray>>()
+        out += 'B' to le(4).put(id.toByte()).putShort(pts.size.toShort()).put(scale.toByte()).array()
         pts.chunked(CHUNK).forEachIndexed { c, chunk ->
             val b = le(4 + 4 * chunk.size).put(id.toByte()).putShort((c * CHUNK).toShort()).put(chunk.size.toByte())
             chunk.forEach { b.putShort((it[0] / scale).toShort()).putShort((it[1] / scale).toShort()) }
-            out += msg('R', s++, b.array())
+            out += 'R' to b.array()
         }
-        out += msg('E', s, le(3).put(id.toByte()).putShort(pts.size.toShort()).array())
+        out += 'E' to le(3).put(id.toByte()).putShort(pts.size.toShort()).array()
         return out
     }
+
+    /** [routeParts] numbered from [seq]. */
+    fun route(seq: Int, id: Int, pts: List<IntArray>): List<ByteArray> =
+        routeParts(id, pts).mapIndexed { i, (k, b) -> msg(k, seq + i, b) }
 }

@@ -121,6 +121,7 @@ class VelaApp : Application(), coil.ImageLoaderFactory {
         // system will not let start a service from is retried when the map comes to the front.
         app.vela.device.DeviceLinkPrefs.init(this)
         app.vela.device.DeviceService.start(this)
+        app.vela.device.watch.WatchService.start(this)
         // The desktop window size Google's requests describe: picked once per install, then kept
         // (a size that changed per launch would be its own oddity). See BrowserViewport.
         run {
