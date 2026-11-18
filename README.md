@@ -20,6 +20,30 @@ Live traffic, real place data and turn-by-turn navigation, with no Google accoun
 
 </div>
 
+## This fork: Vela on your wrist
+
+This fork of [Vela](https://github.com/PimpinPumpkin/Vela) sends the drive to a **CMF Watch Pro 2**
+running the [Vela Nav](https://github.com/fmctools/apps/tree/main/apps/vela-nav) watch app: the next
+turn and its distance, a heading-up map of the route, the speed limit, the time left and the arrival
+time. It also drives a Bluetooth ESP32 nav display (Settings → Nav device).
+
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=c93T4BMBqog">
+    <img src="https://img.youtube.com/vi/c93T4BMBqog/hqdefault.jpg" width="480" alt="Vela Nav on a CMF Watch Pro 2: watch the video on YouTube">
+  </a>
+  <br><sub>▶ <a href="https://www.youtube.com/watch?v=c93T4BMBqog">Watch the demo on YouTube</a></sub>
+</p>
+
+- **Phone:** [the APK from this fork's releases](https://github.com/arunk140/esp32-vela/releases/latest),
+  which installs as `com.arunk140.vela` next to the official Vela. In Settings → Nav device, pick
+  the watch and turn on **Show navigation on the watch**.
+- **Watch:** the [patched firmware and App Loader](https://fmc.freethinkel.dev/firmware), then Vela Nav
+  from the [FMC store](https://fmc.freethinkel.dev/apps).
+- **Privacy:** the watch gets positions as metres from the start of the route, never latitude and
+  longitude, and never the destination's name.
+
+The rest of this README is upstream's.
+
 > [!warning]
 > **Vela is in beta, so you may run into bugs.** If you do, open an issue and fill out the
 > template. Nightlies and canary builds are newer still and less tested than the weekly stable.
