@@ -63,13 +63,19 @@ object WatchNav {
     }
 
     /** A route line in metres as (kind, body) parts: begin, chunks of [CHUNK] points, end. Each
-     *  gets its seq with [msg] when it is sent, so a retry never skips a number. */
-    fun routeParts(id: Int, pts: List<IntArray>): List<Pair<Char, ByteArray>> {
+     *  gets its seq with [msg] when it is sent, so a retry never skips a number. [frame] tags the
+     *  frame the points are in ([WatchDrive.frame]): the watch keeps its streets for a line sent
+     *  again in the same frame, and swaps the line in only once it is whole. */
+    fun routeParts(id: Int, pts: List<IntArray>, frame: Int? = null): List<Pair<Char, ByteArray>> {
         val max = pts.maxOfOrNull { maxOf(kotlin.math.abs(it[0]), kotlin.math.abs(it[1])) } ?: 0
         val scale = max / Short.MAX_VALUE + 1
         require(scale <= 255 && pts.size <= 512)
         val out = ArrayList<Pair<Char, ByteArray>>()
-        out += 'B' to le(4).put(id.toByte()).putShort(pts.size.toShort()).put(scale.toByte()).array()
+        out += 'B' to if (frame == null) {
+            le(4).put(id.toByte()).putShort(pts.size.toShort()).put(scale.toByte()).array()
+        } else {
+            le(6).put(id.toByte()).putShort(pts.size.toShort()).put(scale.toByte()).putShort(frame.toShort()).array()
+        }
         pts.chunked(CHUNK).forEachIndexed { c, chunk ->
             val b = le(4 + 4 * chunk.size).put(id.toByte()).putShort((c * CHUNK).toShort()).put(chunk.size.toByte())
             chunk.forEach { b.putShort((it[0] / scale).toShort()).putShort((it[1] / scale).toShort()) }

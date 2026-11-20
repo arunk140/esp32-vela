@@ -25,6 +25,13 @@ object WatchDrive {
     /** A route line in the watch's units: points in metres from [origin], and their running length. */
     class Geometry(val origin: LatLng, val points: List<IntArray>, val cum: DoubleArray)
 
+    /** A 16-bit tag for the frame around [origin]: two routes from the same first point share it. */
+    fun frame(origin: LatLng): Int {
+        val a = (origin.lat * 1e7).toLong()
+        val b = (origin.lng * 1e7).toLong()
+        return ((a * 31 + b) xor ((a * 31 + b) ushr 32)).toInt().let { it xor (it ushr 16) } and 0xFFFF
+    }
+
     fun metres(origin: LatLng, p: LatLng): IntArray = intArrayOf(
         ((p.lng - origin.lng) * M_PER_DEG_LNG_EQ * cos(Math.toRadians(origin.lat))).roundToInt(),
         ((p.lat - origin.lat) * M_PER_DEG_LAT).roundToInt(),

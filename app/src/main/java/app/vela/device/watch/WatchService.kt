@@ -20,8 +20,10 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import app.vela.MainActivity
 import app.vela.R
+import app.vela.core.data.naming.RoadNameTiles
 import app.vela.core.location.LocationProvider
 import app.vela.core.model.Route
+import app.vela.core.model.distanceTo
 import app.vela.core.nav.NavSession
 import app.vela.core.nav.RouteProjection
 import app.vela.device.DeviceBridge
@@ -36,6 +38,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import kotlin.math.roundToInt
 
@@ -71,6 +74,14 @@ class WatchService : Service() {
     private var geometry: WatchDrive.Geometry? = null
     private var sentText: String? = null
     private var wantSnapshot = true
+
+    // the streets around the car ([WatchRoads]): the last set, and what of it is still to go
+    private var roadsId = 0
+    private var roadsJob: Job? = null
+    private var roads: Pair<app.vela.core.model.LatLng, List<Pair<Char, ByteArray>>>? = null // route origin, parts
+    private var roadsCenter: app.vela.core.model.LatLng? = null
+    private val roadsQueue = ArrayDeque<Pair<Char, ByteArray>>()
+    private var roadsRetryAt = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -184,6 +195,7 @@ class WatchService : Service() {
         sentRoute = null
         sentText = null
         wantSnapshot = true
+        roadsQueue.clear()
     }
 
     private suspend fun send(session: WatchSession, build: (Int) -> ByteArray): Int {
@@ -208,17 +220,60 @@ class WatchService : Service() {
             val g = route?.let { WatchDrive.geometry(it.polyline) }
             if (g != null) {
                 routeId = (routeId + 1) and 0xFF
-                for ((kind, body) in WatchNav.routeParts(routeId, g.points)) {
+                for ((kind, body) in WatchNav.routeParts(routeId, g.points, WatchDrive.frame(g.origin))) {
                     val r = send(session) { WatchNav.msg(kind, it, body) }
                     if (r != WatchSession.OK) return r
                 }
             }
             geometry = g
             sentRoute = route
+            // the watch dropped its streets with the new line: the same set again if it is in this frame
+            roadsQueue.clear()
+            val last = roads
+            if (g != null && last != null && last.first == g.origin) roadsQueue.addAll(last.second) else roadsCenter = null
+        }
+        maybeFindRoads()
+        repeat(ROADS_PER_TICK) {
+            val part = roadsQueue.firstOrNull() ?: return@repeat
+            val r = send(session) { WatchNav.msg(part.first, it, part.second) }
+            if (r != WatchSession.OK) return r
+            roadsQueue.removeFirst()
         }
         val r = send(session) { WatchNav.state(it, stateFor(s, frame, snapshot)) }
         if (r == WatchSession.OK && snapshot) wantSnapshot = false
         return r
+    }
+
+    /**
+     * A new set of streets once the car is [WatchRoads.REFRESH_M] from the last one's centre, read
+     * off the main thread from the map's tiles (a downloaded region's, else the tile host's; with
+     * neither the watch shows the route alone).
+     */
+    private fun maybeFindRoads() {
+        val g = geometry ?: return
+        val fix = lastFix ?: return
+        if (roadsJob?.isActive == true) return
+        val here = app.vela.core.model.LatLng(fix.latitude, fix.longitude)
+        val center = roadsCenter
+        if (center != null && roads?.first == g.origin && center.distanceTo(here) < WatchRoads.REFRESH_M) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now < roadsRetryAt) return
+        roadsJob = scope.launch {
+            val set = withContext(Dispatchers.Default) {
+                RoadNameTiles.linesAlong(WatchRoads.probe(here))?.let { WatchRoads.set(g.origin, here, it) }
+            }
+            if (set == null) {
+                roadsRetryAt = android.os.SystemClock.elapsedRealtime() + ROADS_RETRY_MS
+                return@launch
+            }
+            if (geometry?.origin != g.origin) return@launch // a new route meanwhile
+            roadsId = (roadsId + 1) and 0xFF
+            val parts = WatchRoads.parts(roadsId, set)
+            roads = g.origin to parts
+            roadsCenter = here
+            roadsQueue.clear()
+            roadsQueue.addAll(parts)
+        }
     }
 
     private fun stateFor(s: NavSession.State, frame: DeviceNavFrame, snapshot: Boolean): WatchNav.State {
@@ -237,12 +292,25 @@ class WatchService : Service() {
             fix = fix != null && fix.hasAccuracy() && fix.accuracy < FIX_ACCURACY_M,
             limit = limit,
             position = if (g != null && fix != null) {
-                WatchDrive.metres(g.origin, app.vela.core.model.LatLng(fix.latitude, fix.longitude))
+                // on the route, the car sits on its line: a raw fix wobbles a few metres to the side
+                WatchDrive.metres(g.origin, onRoute(s) ?: app.vela.core.model.LatLng(fix.latitude, fix.longitude))
             } else null,
             courseDeg = course,
             progress = if (g != null) WatchDrive.progress(g, fraction) else 0,
             snapshot = snapshot,
         )
+    }
+
+    /** Where the car is along the route while it follows it, else null. */
+    private fun onRoute(s: NavSession.State): app.vela.core.model.LatLng? {
+        val route = s.route ?: return null
+        if (!s.navigating || s.paused || s.nav.offRoute || route.polyline.size < 2) return null
+        if (cumFor !== route) {
+            cumFor = route
+            cum = RouteProjection.cumulative(route.polyline)
+        }
+        val along = (cum.last() - s.remainingDistance).coerceIn(0.0, cum.last())
+        return RouteProjection.pointAt(route.polyline, cum, along)
     }
 
     /** As [DeviceService]: the road's own direction on a drive, else the GPS course while moving. */
@@ -335,6 +403,9 @@ class WatchService : Service() {
         private const val CHANNEL_ID = "vela_watch"
         private const val NOTIF_ID = 45
         private const val TICK_MS = 1_000L
+        /** Street messages sent beside each state, so a new set never holds the turn countdown up. */
+        private const val ROADS_PER_TICK = 8
+        private const val ROADS_RETRY_MS = 30_000L
         /** How often to look for the watch app while it is closed. */
         private const val IDLE_PING_MS = 3_000L
         private const val FIX_ACCURACY_M = 50f

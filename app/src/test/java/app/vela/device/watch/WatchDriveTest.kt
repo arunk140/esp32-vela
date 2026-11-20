@@ -33,6 +33,18 @@ class WatchDriveTest {
     }
 
     @Test
+    fun aRouteIsTaggedWithItsFrame() {
+        val f = WatchDrive.frame(start)
+        assertEquals(f, WatchDrive.frame(LatLng(12.9000, 77.6000)))
+        assertTrue(f != WatchDrive.frame(LatLng(12.9001, 77.6000)))
+        val b = WatchNav.routeParts(3, listOf(intArrayOf(0, 0), intArrayOf(5, 5)), f).first()
+        assertEquals('B', b.first)
+        assertEquals(6, b.second.size)
+        assertEquals(f, (b.second[4].toInt() and 0xFF) or ((b.second[5].toInt() and 0xFF) shl 8))
+        assertEquals(4, WatchNav.routeParts(3, listOf(intArrayOf(0, 0), intArrayOf(5, 5))).first().second.size)
+    }
+
+    @Test
     fun aLongRouteIsCappedAt512() {
         val wiggle = (0 until 5000).map { LatLng(12.9 + it * 0.0001, 77.6 + (if (it % 2 == 0) 0.0 else 0.0003)) }
         val g = WatchDrive.geometry(wiggle)!!
