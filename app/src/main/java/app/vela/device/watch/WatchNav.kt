@@ -20,6 +20,23 @@ object WatchNav {
     const val TEXT_MAX = 100
     val ASK = byteArrayOf('n'.code.toByte(), '1'.code.toByte(), 'Q'.code.toByte())
 
+    /** Which shortcuts the watch may offer (`P` flags): only whether each is set, never where. */
+    const val P_HOME = 1
+    const val P_WORK = 2
+    /** `P` status: what came of the watch's last request to start a drive. */
+    const val START_IDLE = 0
+    const val START_BUSY = 1
+    const val START_FAILED = 2
+
+    /** The watch asks for a drive: `n1A` and 1 (Home) or 2 (Work). Null for anything else. */
+    fun action(e: ByteArray): Int? =
+        if (e.size == 4 && e[0] == 'n'.code.toByte() && e[1] == '1'.code.toByte() && e[2] == 'A'.code.toByte()) {
+            e[3].toInt().takeIf { it == P_HOME || it == P_WORK }
+        } else null
+
+    fun places(seq: Int, flags: Int, status: Int): ByteArray =
+        msg('P', seq, byteArrayOf(flags.toByte(), status.toByte()))
+
     data class State(
         val flags: Int,
         val maneuver: Int,

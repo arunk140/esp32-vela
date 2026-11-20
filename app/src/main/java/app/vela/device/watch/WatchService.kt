@@ -20,15 +20,20 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import app.vela.MainActivity
 import app.vela.R
+import app.vela.core.data.MapDataSource
+import app.vela.core.data.PlaceShortcutStore
 import app.vela.core.data.naming.RoadNameTiles
 import app.vela.core.location.LocationProvider
 import app.vela.core.model.Route
+import app.vela.core.model.ShortcutKind
+import app.vela.core.model.TravelMode
 import app.vela.core.model.distanceTo
 import app.vela.core.nav.NavSession
 import app.vela.core.nav.RouteProjection
 import app.vela.device.DeviceBridge
 import app.vela.device.DeviceNavFrame
 import app.vela.device.DeviceService
+import app.vela.service.NavigationService
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -56,6 +61,8 @@ class WatchService : Service() {
 
     @Inject lateinit var navSession: NavSession
     @Inject lateinit var locationProvider: LocationProvider
+    @Inject lateinit var shortcuts: PlaceShortcutStore
+    @Inject lateinit var mapDataSource: MapDataSource
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var loop: Job? = null
@@ -82,6 +89,11 @@ class WatchService : Service() {
     private var roadsCenter: app.vela.core.model.LatLng? = null
     private val roadsQueue = ArrayDeque<Pair<Char, ByteArray>>()
     private var roadsRetryAt = 0L
+
+    // the Home / Work buttons on the watch
+    private var sentPlaces = -1
+    private var startJob: Job? = null
+    private var startFailedAt = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -179,6 +191,7 @@ class WatchService : Service() {
             while (true) {
                 val e = session.events.tryReceive().getOrNull() ?: break
                 if (e.contentEquals(WatchNav.ASK)) wantSnapshot = true
+                WatchNav.action(e)?.let { startShortcut(if (it == WatchNav.P_HOME) ShortcutKind.HOME else ShortcutKind.WORK) }
             }
             when (val r = push(session)) {
                 WatchSession.OK -> silent = 0
@@ -196,6 +209,7 @@ class WatchService : Service() {
         sentText = null
         wantSnapshot = true
         roadsQueue.clear()
+        sentPlaces = -1
     }
 
     private suspend fun send(session: WatchSession, build: (Int) -> ByteArray): Int {
@@ -214,6 +228,12 @@ class WatchService : Service() {
             val r = send(session) { WatchNav.text(it, text) }
             if (r != WatchSession.OK) return r
             sentText = text
+        }
+        val places = placesWord()
+        if (snapshot || places != sentPlaces) {
+            val r = send(session) { WatchNav.places(it, places and 0xFF, places shr 8) }
+            if (r != WatchSession.OK) return r
+            sentPlaces = places
         }
         val route = s.route?.takeIf { frame.active }
         if (snapshot || route !== sentRoute) {
@@ -299,6 +319,62 @@ class WatchService : Service() {
             progress = if (g != null) WatchDrive.progress(g, fraction) else 0,
             snapshot = snapshot,
         )
+    }
+
+    /** The `P` flags (low byte) and status (high byte), as one value to compare with the last sent. */
+    private fun placesWord(): Int {
+        var flags = 0
+        if (shortcuts.get(ShortcutKind.HOME) != null) flags = flags or WatchNav.P_HOME
+        if (shortcuts.get(ShortcutKind.WORK) != null) flags = flags or WatchNav.P_WORK
+        val now = android.os.SystemClock.elapsedRealtime()
+        val status = when {
+            startJob?.isActive == true -> WatchNav.START_BUSY
+            startFailedAt != 0L && now - startFailedAt < START_FAILED_SHOW_MS -> WatchNav.START_FAILED
+            else -> WatchNav.START_IDLE
+        }
+        return flags or (status shl 8)
+    }
+
+    /**
+     * The watch's Home / Work button: a drive there from where the phone is, as Android Auto
+     * starts one ([app.vela.car.screen.RoutePreviewCarScreen]): the first route offered, with the
+     * avoid settings, named by the open routers, in the chosen voice. Nothing while a drive is on.
+     */
+    private fun startShortcut(kind: ShortcutKind) {
+        if (startJob?.isActive == true || navSession.state.value.navigating) return
+        val place = shortcuts.get(kind) ?: return
+        startFailedAt = 0L
+        startJob = scope.launch {
+            val from = lastFix?.let { app.vela.core.model.LatLng(it.latitude, it.longitude) } ?: locationProvider.lastKnown()
+            val dest = app.vela.core.model.LatLng(place.lat, place.lng)
+            val picked = from?.let {
+                runCatching {
+                    mapDataSource.directions(
+                        it, dest, TravelMode.DRIVE,
+                        avoidTolls = app.vela.core.data.RoutingPrefs.avoidTolls,
+                        avoidHighways = app.vela.core.data.RoutingPrefs.avoidHighways,
+                        avoidFerries = app.vela.core.data.RoutingPrefs.avoidFerries,
+                    )
+                }.getOrNull()?.firstOrNull()
+            }
+            if (from == null || picked == null) {
+                startFailedAt = android.os.SystemClock.elapsedRealtime()
+                return@launch
+            }
+            val named = if (picked.provisional) {
+                runCatching { mapDataSource.nameRoute(picked, from, dest, TravelMode.DRIVE) }.getOrDefault(picked)
+            } else picked
+            navSession.start(named, dest, place.name.ifBlank { kind.label }, voiceEngine(), emptyList(), TravelMode.DRIVE)
+            NavigationService.start(applicationContext)
+        }
+    }
+
+    /** The voice a drive started here speaks in: the user's pick, mapped as the phone and the car do. */
+    private fun voiceEngine(): String? {
+        val saved = getSharedPreferences("vela_settings", Context.MODE_PRIVATE).getString("voice_engine", null)
+        return if (saved == null || saved.startsWith("vela.")) {
+            if (app.vela.core.voice.VelaPiper.isReady(applicationContext)) app.vela.core.voice.VelaPiper.ENGINE_ID else null
+        } else saved
     }
 
     /** Where the car is along the route while it follows it, else null. */
@@ -406,6 +482,8 @@ class WatchService : Service() {
         /** Street messages sent beside each state, so a new set never holds the turn countdown up. */
         private const val ROADS_PER_TICK = 8
         private const val ROADS_RETRY_MS = 30_000L
+        /** How long the watch shows that a drive could not be planned. */
+        private const val START_FAILED_SHOW_MS = 15_000L
         /** How often to look for the watch app while it is closed. */
         private const val IDLE_PING_MS = 3_000L
         private const val FIX_ACCURACY_M = 50f

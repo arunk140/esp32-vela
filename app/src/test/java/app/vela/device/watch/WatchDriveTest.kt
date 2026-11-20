@@ -3,6 +3,7 @@ package app.vela.device.watch
 import app.vela.core.model.LatLng
 import app.vela.device.DeviceManeuver
 import app.vela.device.DeviceNavFrame
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -42,6 +43,17 @@ class WatchDriveTest {
         assertEquals(6, b.second.size)
         assertEquals(f, (b.second[4].toInt() and 0xFF) or ((b.second[5].toInt() and 0xFF) shl 8))
         assertEquals(4, WatchNav.routeParts(3, listOf(intArrayOf(0, 0), intArrayOf(5, 5))).first().second.size)
+    }
+
+    @Test
+    fun theWatchAsksForHomeOrWorkOnly() {
+        fun m(vararg b: Int) = b.map { it.toByte() }.toByteArray()
+        assertEquals(WatchNav.P_HOME, WatchNav.action(m('n'.code, '1'.code, 'A'.code, 1)))
+        assertEquals(WatchNav.P_WORK, WatchNav.action(m('n'.code, '1'.code, 'A'.code, 2)))
+        assertEquals(null, WatchNav.action(m('n'.code, '1'.code, 'A'.code, 3)))
+        assertEquals(null, WatchNav.action(m('n'.code, '1'.code, 'A'.code, 1, 0)))
+        assertEquals(null, WatchNav.action(WatchNav.ASK))
+        assertArrayEquals(m('n'.code, '1'.code, 'P'.code, 9, 3, 1), WatchNav.places(9, 3, WatchNav.START_BUSY))
     }
 
     @Test
