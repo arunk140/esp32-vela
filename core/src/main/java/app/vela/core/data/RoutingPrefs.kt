@@ -20,9 +20,9 @@ object RoutingPrefs {
     @Volatile var avoidFerries: Boolean = false
 
     /** Motorcycle mode (drive only): routes keep off roads OpenStreetMap closes to motorcycles
-     *  (`motorcycle=no`, `motor_vehicle=no` and the like). Google's keyless directions have no such
-     *  mode, so a motorcycle trip is the downloaded region's motorcycle profile, else Valhalla's
-     *  `motorcycle` costing (SPEC 4.3, Motorcycle mode). The app sets it from the route card's
+     *  (`motorcycle=no`, `motor_vehicle=no` and the like): Google's two-wheeler mode where it
+     *  answers, else the downloaded region's motorcycle profile, else Valhalla's `motorcycle`
+     *  costing (SPEC 4.3, Motorcycle). The app sets it from the route card's
      *  Motorcycle tab while Settings > Navigation shows that tab. */
     @Volatile var motorcycle: Boolean = false
 

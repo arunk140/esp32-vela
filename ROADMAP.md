@@ -263,11 +263,12 @@ Small items, one pull request each.
 Each of these passed its unit tests and has not been seen or heard where it matters. Take one
 off the list when it has been.
 
-- Motorcycle mode (SPEC 4.3, Motorcycle): the offline motorcycle profile is unit-tested and
-  Valhalla's motorcycle costing answered a Davis trip. Not yet driven, and not yet seen to route
-  round a road tagged `motorcycle=no` on a phone, offline or online. Plan a trip across a
-  motorcycle-banned expressway on the Motorcycle and Drive tabs and compare; time a long offline
-  motorcycle trip, which runs without the region's shortcuts and may outrun its 10 s.
+- Motorcycle mode (SPEC 4.3, Motorcycle): Google's two-wheeler request is in the health probe
+  (Mumbai fixture, routes off the Bandra-Worli Sea Link), the offline motorcycle profile is
+  unit-tested, and Valhalla's motorcycle costing answered a Davis trip. The Motorcycle tab has
+  been seen on a phone. Not yet ridden: follow a Google two-wheeler route with its tile-named
+  turns, and a reroute on one. Not yet timed: a long offline motorcycle trip, which runs without
+  the region's shortcuts and may outrun its 10 s.
 
 - Louder and Loudest for a voice from the phone's engine (`SystemVoiceBoost`, a
   `LoudnessEnhancer` on Vela's audio session, issue #979; SPEC 9.1): the step-to-gain mapping is

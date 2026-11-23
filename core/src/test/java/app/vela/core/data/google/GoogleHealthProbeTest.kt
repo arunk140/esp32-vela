@@ -129,6 +129,17 @@ class GoogleHealthProbeTest {
             "${routes.size} routes, ${"%.1f".format(plainKm)} km, ${"%.0f".format(min)} min, traffic=${top.durationInTrafficSeconds != null}"
         }
 
+        check("directions-two-wheeler", results) {
+            // Mumbai fixture: the car's route crosses the Bandra-Worli Sea Link, closed to two-wheelers.
+            val bandra = LatLng(19.0596, 72.8295)
+            val worli = LatLng(19.0176, 72.8172)
+            val url = "${cal.directionsEndpoint}&pb=${enc(DirectionsPb.build(bandra, worli, TravelMode.DRIVE, cal.directionsPb, twoWheeler = cal.directionsTwoWheeler))}"
+            val routes = DirectionsParser.parse(GoogleResponse.parse(get(cal, url)), cal.directionsPaths)
+            check(routes.isNotEmpty()) { "no two-wheeler routes" }
+            check(routes.none { it.summary.orEmpty().contains("Sea Link") }) { "a two-wheeler route crosses the Sea Link: ${routes.map { it.summary }}" }
+            "${routes.size} routes, none over the Sea Link, ${routes.first().durationInTrafficSeconds?.let { "${(it / 60).toInt()} min with traffic" } ?: "no traffic"}"
+        }
+
         check("directions-avoid-highways", results) {
             val url = "${cal.directionsEndpoint}&pb=${enc(DirectionsPb.build(davis, sacramento, TravelMode.DRIVE, cal.directionsPb, avoidHighways = true))}"
             val top = DirectionsParser.parse(GoogleResponse.parse(get(cal, url)), cal.directionsPaths).firstOrNull() ?: error("no routes")

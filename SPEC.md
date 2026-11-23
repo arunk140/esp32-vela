@@ -421,6 +421,15 @@ block. `DirectionsPb.withAvoid` places them by pattern and fixes the `m` group c
 recalibrated template still works. A stop is one more `!1m4!3m2!3d<lat>!4d<lng>!6e2` group
 before the destination's (`withWaypoints`).
 
+Google's two-wheeler mode is mode 9 plus `!8b1` in the same `!20m` route-options block, the
+block's count growing by one (calibration `directionsTwoWheeler`, default `!1e9!8b1`;
+`DirectionsPb.withTwoWheeler` places the flag by field number). Mode 9 without the flag answers
+with the trip's ends and no route, and the flag alone on a car changes nothing. On the Mumbai
+fixture, Bandra to Worli, the car answers three routes over the Bandra-Worli Sea Link, which is
+closed to two-wheelers, in 16 to 17 min; two-wheeler answers three that keep off it, in 29 to 30
+min with traffic. Davis to Sacramento answers no route: Google offers the mode only in some
+countries. An empty `directionsTwoWheeler` turns the request off.
+
 A destination that is a Google place is asked for the way Google's web client asks:
 `!1m6!1s<text>!2s<feature id>!3m2!3d<lat>!4d<lng>!6e0` in place of the destination's bare-point
 group (`DirectionsPb.withPlace`, calibration `directionsPlaceGroup`), with `!` and `*` in the
@@ -1528,20 +1537,29 @@ read it. A tap between Drive and Motorcycle routes the open drive again
 drive is routed once (`pickModeTab`). The drive's time shows on whichever of the two tabs is
 current, and the mode times are cached per value of the flag.
 
-A drive in motorcycle mode goes to `motorcycleRoutes` instead of the driving chain. Google is
-not asked: its keyless directions have no motorcycle mode. Two routers are asked at once:
+A drive in motorcycle mode goes to `motorcycleRoutes` instead of the driving chain. Three
+routers are asked at once:
 
+- Google in its two-wheeler mode (`googleDirections(twoWheeler = true)`, the request in SPEC
+  3.4), waited for `MOTORCYCLE_GOOGLE_WAIT_MS` 8 s, `MOTORCYCLE_GOOGLE_URGENT_MS` 3 s on a
+  reroute. Its routes win and carry traffic. Each keeps Google's line with its turns named from
+  the map tiles (`twoWheelerNamed`, `LineNamer`), or Google's own steps tagged
+  `abbreviatedSteps` when that fails. The open-router snap the driving chain uses is not run: it
+  would pull the line back onto a road closed to two-wheelers. A reply line too short to draw is
+  dropped, not redrawn by the car router. Where Google has no two-wheeler mode it answers no
+  route, and the next router's answer stands.
 - The downloaded region's car router built as its `motorcycle` variant (routing.xml
   `derivedProfiles`; `Builder.build` sets `profile_motorcycle`), which closes ways tagged
   `motorcycle=no` and the like. The baked highway-hierarchy shortcuts belong to the plain car
   profile, so this search runs without them. Budget `MOTORCYCLE_ONDEVICE_TIMEOUT_MS` 10 s,
-  `MOTORCYCLE_ONDEVICE_URGENT_MS` 4 s on a reroute. Its answer wins when it comes in time.
+  `MOTORCYCLE_ONDEVICE_URGENT_MS` 4 s on a reroute, counted from the start of the fetch. Its
+  answer is next.
 - Valhalla `route` with `costing: motorcycle`, `use_tracks` and `use_trails` 0, and the avoids
   as `use_tolls`, `use_highways`, `use_ferry` 0. A trip without stops asks for two alternates. A
   route whose summary still has an avoided road kind is tagged `avoidNotHonored`.
 
-These routes carry no traffic. When neither answers, the driving chain's routes are used and
-tagged `motorcycleNotHonored`, and the card says they are car routes.
+The open routers' routes carry no traffic. When none answers, the driving chain's routes are
+used and tagged `motorcycleNotHonored`, and the card says they are car routes.
 
 A link asks for the mode too (`MapLink.motorcycle`): `travelmode=two-wheeler` and
 `google.navigation:...&mode=l` pick Motorcycle, `travelmode=driving`, `mode=d` and `dirflg=d`

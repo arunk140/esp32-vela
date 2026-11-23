@@ -1848,10 +1848,12 @@ class GoogleMapsDataSource @Inject constructor(
     }
 
     /**
-     * Motorcycle mode's routes (RoutingPrefs.motorcycle): the downloaded region's motorcycle
-     * profile and Valhalla's `motorcycle` costing, asked together. The region's answer wins when it
-     * comes inside its budget, as for bike-safe routes; otherwise Valhalla's. Null when neither
-     * answered. Google is not asked: its keyless directions have no motorcycle mode.
+     * Motorcycle mode's routes (RoutingPrefs.motorcycle). Google's two-wheeler mode, the downloaded
+     * region's motorcycle profile and Valhalla's `motorcycle` costing are asked together. Google's
+     * routes win when they come inside [MOTORCYCLE_GOOGLE_WAIT_MS]: they carry traffic. Each keeps
+     * Google's line, its turns named from the map tiles ([twoWheelerNamed]); the car router's snap
+     * the drive chain uses would pull it back onto a road closed to two-wheelers. Then the region's
+     * answer when it comes inside its budget, then Valhalla's. Null when none answered.
      */
     private suspend fun motorcycleRoutes(
         origin: LatLng,
@@ -1866,21 +1868,35 @@ class GoogleMapsDataSource @Inject constructor(
         val mode = TravelMode.DRIVE
         val points = listOf(origin) + waypoints + destination
         val scope = kotlinx.coroutines.CoroutineScope(Dispatchers.IO)
+        val googleD = scope.async {
+            kotlinx.coroutines.withTimeoutOrNull(if (urgent) MOTORCYCLE_GOOGLE_URGENT_MS else MOTORCYCLE_GOOGLE_WAIT_MS) {
+                runCatching { googleDirections(origin, destination, mode, avoidTolls, avoidHighways, avoidFerries, waypoints, twoWheeler = true) }.getOrNull().orEmpty()
+            }.orEmpty()
+        }
         val onlineD = scope.async {
             runCatching {
                 ValhallaRouter.motorcycleRoute(http, points, alternates = waypoints.isEmpty(), avoidTolls, avoidHighways, avoidFerries, tries = if (urgent) 1 else 2)
             }.getOrDefault(emptyList())
         }
-        if (routeEngine.isReady(mode) && routeEngine.covers(origin, destination, mode)) {
-            val budget = if (urgent) MOTORCYCLE_ONDEVICE_URGENT_MS else MOTORCYCLE_ONDEVICE_TIMEOUT_MS
-            // Unstructured, so the deadline can walk away from the native search (it outlives a timeout).
-            val onDeviceD = scope.async {
-                runCatching {
-                    if (waypoints.isEmpty()) routeEngine.route(origin, destination, mode, avoidTolls, avoidHighways, avoidFerries, departBearingDeg, maxMs = budget).map { it.copy(offline = true) }
-                    else listOfNotNull(chainOnDevice(points, mode, avoidTolls, avoidHighways, avoidFerries, departBearingDeg, maxMs = budget)?.copy(offline = true))
-                }.getOrDefault(emptyList())
-            }
-            val onDevice = kotlinx.coroutines.withTimeoutOrNull(budget) { onDeviceD.await() }.orEmpty()
+        val budget = if (urgent) MOTORCYCLE_ONDEVICE_URGENT_MS else MOTORCYCLE_ONDEVICE_TIMEOUT_MS
+        val startMs = System.currentTimeMillis()
+        // Unstructured, so the deadline can walk away from the native search (it outlives a timeout).
+        val onDeviceD = if (routeEngine.isReady(mode) && routeEngine.covers(origin, destination, mode)) scope.async {
+            runCatching {
+                if (waypoints.isEmpty()) routeEngine.route(origin, destination, mode, avoidTolls, avoidHighways, avoidFerries, departBearingDeg, maxMs = budget).map { it.copy(offline = true) }
+                else listOfNotNull(chainOnDevice(points, mode, avoidTolls, avoidHighways, avoidFerries, departBearingDeg, maxMs = budget)?.copy(offline = true))
+            }.getOrDefault(emptyList())
+        } else null
+        val google = googleD.await()
+        if (google.isNotEmpty()) {
+            onlineD.cancel(); onDeviceD?.cancel()
+            val named = coroutineScope { google.map { r -> async { twoWheelerNamed(r) } }.awaitAll() }
+            diag.record("directions", "MOTORCYCLE → google two-wheeler ${named.size} routes, ${named.count { it.source == RouteSource.GOOGLE_LINE_NAMED }} named from the tiles", "")
+            return@io named
+        }
+        if (onDeviceD != null) {
+            val left = budget - (System.currentTimeMillis() - startMs)
+            val onDevice = if (left > 0) kotlinx.coroutines.withTimeoutOrNull(left) { onDeviceD.await() }.orEmpty() else onDeviceD.takeIf { it.isCompleted }?.await().orEmpty()
             if (onDevice.isNotEmpty()) {
                 onlineD.cancel()
                 diag.record("directions", "MOTORCYCLE → on-device ${onDevice.size} routes / ${onDevice.first().maneuvers.size} steps", "")
@@ -1895,6 +1911,15 @@ class GoogleMapsDataSource @Inject constructor(
         diag.record("directions", "MOTORCYCLE → nothing answered, falling to the car chain", "")
         null
     }
+
+    /** A Google two-wheeler route with its turns named from the map tiles ([LineNamer]), as the
+     *  drive chain names a line it could not snap. Google's own abbreviated steps when that fails,
+     *  tagged so a drive's recheck upgrades them. */
+    private suspend fun twoWheelerNamed(route: Route): Route =
+        kotlinx.coroutines.withTimeoutOrNull(WALK_NAME_WAIT_MS) {
+            app.vela.core.data.naming.RoadNameTiles.linesAlong(route.polyline)
+                ?.let { app.vela.core.data.naming.LineNamer.name(route, it, TravelMode.DRIVE) }
+        } ?: route.copy(provisional = false, abbreviatedSteps = true, source = RouteSource.GOOGLE_ABBREVIATED)
 
     /** True when [RouteGeometry.spurAt] finds a spur on [route] AND one of the route's own
      *  maneuvers within [SPUR_TURN_NEAR_M] of it is a turn or U-turn. */
@@ -2176,7 +2201,7 @@ class GoogleMapsDataSource @Inject constructor(
     /** Google's keyless directions — now the FALLBACK router (OSRM unreachable) and the
      *  live-traffic source (ETA / duration-in-traffic / congestion spans). Its step list is
      *  abbreviated for long routes, which is exactly why OSRM is primary. */
-    private suspend fun googleDirections(origin: LatLng, destination: LatLng, mode: TravelMode, avoidTolls: Boolean = false, avoidHighways: Boolean = false, avoidFerries: Boolean = false, waypoints: List<LatLng> = emptyList(), walkCompare: Boolean = false): List<Route> {
+    private suspend fun googleDirections(origin: LatLng, destination: LatLng, mode: TravelMode, avoidTolls: Boolean = false, avoidHighways: Boolean = false, avoidFerries: Boolean = false, waypoints: List<LatLng> = emptyList(), walkCompare: Boolean = false, twoWheeler: Boolean = false): List<Route> {
         // Without Google the open router's answer stands alone: no traffic, no Google alternates,
         // no abbreviated fallback. Every caller already handles an empty reply as "Google did not
         // answer", which is exactly the state this is.
@@ -2186,11 +2211,15 @@ class GoogleMapsDataSource @Inject constructor(
         // crossings and double-backs (measured +20-110% on Davis, Sacramento and Dhaka walks). Only
         // the walking branch of directions() asks, to see whether Google's walk is much shorter.
         if (mode == TravelMode.WALK && !walkCompare) return emptyList()
-        session.ensure()
         val cal = calibration.current()
+        // A motorcycle drive asks for Google's two-wheeler mode, or nothing: a car answer would cross
+        // the roads the mode is for.
+        if (twoWheeler && (mode != TravelMode.DRIVE || !DirectionsPb.twoWheelerSupported(cal.directionsPb, cal.directionsTwoWheeler))) return emptyList()
+        session.ensure()
         val pb = DirectionsPb.build(
             origin, destination, mode, cal.directionsPb, avoidTolls, avoidHighways, avoidFerries, waypoints,
             place = app.vela.core.data.DestinationPlaces.at(destination), placeGroup = cal.directionsPlaceGroup,
+            twoWheeler = if (twoWheeler) cal.directionsTwoWheeler else null,
         )
         val url = "${cal.directionsEndpoint}&pb=${pb.enc()}"
         val routes = try {
@@ -2202,6 +2231,8 @@ class GoogleMapsDataSource @Inject constructor(
         // Counts only: whether this reply carries the step parts the tiles' naming reads.
         runCatching { android.util.Log.i("VelaDirections", "google steps: ${routes.joinToString { "${it.stepNames.size} named, ${it.exitSigns.size} exits" }}") }
         return if (routes.all { it.polyline.size > 2 }) routes
+        // A line drawn by a car router would be no two-wheeler route.
+        else if (twoWheeler) routes.filter { it.polyline.size > 2 }
         else {
             val geoms = RouteGeometry.fetchAll(http, origin, destination, mode)
             routes.mapIndexed { i, r ->
@@ -2433,6 +2464,9 @@ class GoogleMapsDataSource @Inject constructor(
          *  and takes the plain search, the baked car shortcuts being closed to it. */
         const val MOTORCYCLE_ONDEVICE_TIMEOUT_MS = 10_000L
         const val MOTORCYCLE_ONDEVICE_URGENT_MS = 4_000L
+        /** How long motorcycle mode waits for Google's two-wheeler routes before the open routers'. */
+        const val MOTORCYCLE_GOOGLE_WAIT_MS = 8_000L
+        const val MOTORCYCLE_GOOGLE_URGENT_MS = 3_000L
         // Fallback viewport when no user location is available — search is
         // viewport-driven and needs one. Callers normally pass the real location.
         val DEFAULT_VIEWPORT = LatLng(37.7749, -122.4194)

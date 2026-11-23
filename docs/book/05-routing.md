@@ -419,21 +419,26 @@ Bike routes carry no traffic.
 ### Motorcycles
 
 Settings > Navigation > "Motorcycle mode" adds a Motorcycle tab after Drive on the route card.
-A motorcycle trip keeps off roads that OpenStreetMap closes to motorcycles, such as an
-expressway tagged `motorcycle=no`. Google's keyless directions have no motorcycle mode, so it is
-not asked. Two routers are asked at once:
+A motorcycle trip keeps off roads closed to motorcycles, such as an expressway tagged
+`motorcycle=no`. Three routers are asked at once:
 
-1. The on-phone car router in its motorcycle variant, where a region covers the trip. It runs
-   without the region's baked shortcuts, which were built for cars and would cross a closed
-   road. It gets 10 s, or 4 s on a reroute, and its route wins when it comes in time.
-2. Valhalla with motorcycle costing, which also keeps off tracks and trails. A trip without
+1. Google in its two-wheeler mode, which it offers in some countries. Its routes come with
+   traffic and win when they arrive within 8 s, or 3 s on a reroute. The line is kept as Google
+   drew it and its turns are named from the map tiles. The car router's snap is skipped: it would
+   pull the route back onto a road closed to two-wheelers. On a Mumbai trip from Bandra to Worli,
+   the car routes all cross the Bandra-Worli Sea Link and the two-wheeler routes keep off it.
+   Where Google has no two-wheeler mode it answers no route.
+2. The on-phone car router in its motorcycle variant, where a region covers the trip. It runs
+   without the region's baked shortcuts, which were built for cars and would cross a closed road.
+   It gets 10 s, or 4 s on a reroute.
+3. Valhalla with motorcycle costing, which also keeps off tracks and trails. A trip without
    stops gets two alternates. The avoid chips are preferences there, and a route that still
    uses an avoided road kind says so.
 
-When neither answers, the drive gets a car route and the card says it may use a road closed to
-motorcycles. Motorcycle routes carry no traffic. A Google Maps link that asks for a two-wheeler
-picks Motorcycle; one that asks for a car picks Drive. The choice reaches reroutes,
-Android Auto, and the Home and Work buttons on a nav device.
+When none answers, the drive gets a car route and the card says it may use a road closed to
+motorcycles. Only Google's routes carry traffic. A Google Maps link that asks for a two-wheeler
+picks Motorcycle; one that asks for a car picks Drive. The choice reaches reroutes, Android Auto,
+and the Home and Work buttons on a nav device.
 
 ### Riding a GPX track
 

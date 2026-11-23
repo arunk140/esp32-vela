@@ -23,6 +23,9 @@ data class Calibration(
     // A destination that is a Google place: replaces the template's destination group
     // (DirectionsPb.withPlace). `{DTEXT}` the place's text, `{DFID}` its feature id.
     val directionsPlaceGroup: String = DirectionsPb.DEFAULT_PLACE_GROUP,
+    // Google's two-wheeler mode for a motorcycle drive (DirectionsPb.withTwoWheeler): the mode,
+    // then the flags its web client adds to the route-options block. Empty = never ask Google.
+    val directionsTwoWheeler: String = DirectionsPb.DEFAULT_TWO_WHEELER,
     val reviewsEndpoint: String,
     val reviewsPb: String,
     val sessionWarmUrl: String,

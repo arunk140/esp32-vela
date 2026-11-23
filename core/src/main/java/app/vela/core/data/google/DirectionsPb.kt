@@ -37,6 +37,15 @@ object DirectionsPb {
      *  the bare point's route ended: at the place's entrance point, not the road nearest the pin. */
     const val DEFAULT_PLACE_GROUP = "!1m6!1s{DTEXT}!2s{DFID}!3m2!3d{DLAT}!4d{DLNG}!6e0"
 
+    /** Google's two-wheeler mode, as its web client asks for it (captured 2026-11-23 with the
+     *  two-wheeler tab picked): travel mode 9 in the `!20m` route-options block, plus `!8b1` in that
+     *  block. Mode 9 without the flag answers with the trip's ends and no route; the flag alone on a
+     *  car changes nothing. Checked from a plain client on a Mumbai fixture, Bandra to Worli: the car
+     *  answers three routes over the Bandra-Worli Sea Link, closed to two-wheelers, 16 to 17 min;
+     *  this answers three that keep off it, 29 to 30 min with traffic. The first element is the
+     *  mode, the rest are flags placed in that block by field number ([withTwoWheeler]). */
+    const val DEFAULT_TWO_WHEELER = "!1e9!8b1"
+
     /** Text inside a pb string: `!` and `*` are written as their escapes. */
     internal fun pbText(s: String): String = s.replace("*", "*2A").replace("!", "*21")
 
@@ -60,6 +69,8 @@ object DirectionsPb {
         waypoints: List<LatLng> = emptyList(),
         place: app.vela.core.data.DestinationPlaces.Ref? = null,
         placeGroup: String = DEFAULT_PLACE_GROUP,
+        /** Google's two-wheeler options ([DEFAULT_TWO_WHEELER]) for a motorcycle drive; null for a car. */
+        twoWheeler: String? = null,
     ): String {
         val modeCode = when (mode) {
             TravelMode.DRIVE -> 0
@@ -68,7 +79,10 @@ object DirectionsPb {
             TravelMode.TRANSIT -> 3
         }
         val drive = mode == TravelMode.DRIVE
-        val fitted = RequestShape.fitDirections(template, listOf(origin) + waypoints + destination)
+        val fitted = RequestShape.fitDirections(
+            if (twoWheeler != null && drive) withTwoWheeler(template, twoWheeler) ?: template else template,
+            listOf(origin) + waypoints + destination,
+        )
         return BrowserViewport.apply(withPlace(withWaypoints(withAvoid(fitted, avoidTolls && drive, avoidHighways && drive, avoidFerries && drive), waypoints), place, placeGroup))
             .replace("{OLAT}", origin.lat.toString())
             .replace("{OLNG}", origin.lng.toString())
@@ -93,6 +107,47 @@ object DirectionsPb {
      *  request with only that flag flipped swapped a ferry crossing for a long road detour. An
      *  existing `!7b` child is rewritten in place; otherwise `!7b1` is inserted and the outer count
      *  grows by one. */
+    /** Whether [withTwoWheeler] can ask [template] for Google's two-wheeler mode. */
+    fun twoWheelerSupported(template: String, options: String): Boolean = withTwoWheeler(template, options) != null
+
+    /**
+     * [template] with its `!20m<n>!1e{MODE}` route-options block asked for [options]: the mode in
+     * its first element (`!1e9`) replaces `{MODE}`, and each further scalar (`!8b1`) goes into the
+     * block before the first child with a higher field number, the block's count growing by one.
+     * A child already there with that field number is rewritten. Null when the template has no such
+     * block of plain scalars, or [options] does not start with a mode.
+     */
+    internal fun withTwoWheeler(template: String, options: String): String? {
+        val parts = options.split('!').filter { it.isNotEmpty() }
+        val mode = parts.firstOrNull()?.let { MODE_EL.matchEntire(it) }?.groupValues?.get(1) ?: return null
+        val flags = parts.drop(1).map { SCALAR_EL.matchEntire(it) ?: return null }
+        val head = OPTIONS_BLOCK.find(template) ?: return null
+        val count = head.groupValues[1].toInt()
+        // The block's children after the mode: plain scalars, `count - 1` of them.
+        val rest = template.substring(head.range.last + 1)
+        val children = SCALAR_RUN.find(rest)?.value?.split('!')?.filter { it.isNotEmpty() }.orEmpty()
+        if (children.size < count - 1) return null
+        val kids = children.take(count - 1).toMutableList()
+        for (f in flags) {
+            val field = f.groupValues[1].toInt()
+            val at = kids.indexOfFirst { SCALAR_EL.matchEntire(it)!!.groupValues[1].toInt() >= field }
+            when {
+                at >= 0 && SCALAR_EL.matchEntire(kids[at])!!.groupValues[1].toInt() == field -> kids[at] = f.value
+                at >= 0 -> kids.add(at, f.value)
+                else -> kids.add(f.value)
+            }
+        }
+        val oldBody = children.take(count - 1).joinToString("") { "!$it" }
+        val newBody = kids.joinToString("") { "!$it" }
+        return template.substring(0, head.range.first) + "!20m${kids.size + 1}!1e$mode" + newBody +
+            rest.substring(oldBody.length)
+    }
+
+    private val OPTIONS_BLOCK = Regex(Regex.escape("!20m") + "(\\d+)" + Regex.escape("!1e{MODE}"))
+    private val MODE_EL = Regex("1e(\\d+)")
+    private val SCALAR_EL = Regex("(\\d+)[bei](-?\\d+)")
+    private val SCALAR_RUN = Regex("^(![0-9]+[bei]-?[0-9]+)+")
+
     /** Whether [withAvoid] can place the flags in [template] at all. */
     fun avoidSupported(template: String): Boolean = AVOID_BLOCK.containsMatchIn(template)
 

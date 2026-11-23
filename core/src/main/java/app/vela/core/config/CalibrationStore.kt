@@ -200,6 +200,8 @@ class CalibrationStore @Inject constructor(
                 directionsEndpoint = str("directionsEndpoint", d.directionsEndpoint),
                 directionsPb = str("directionsPb", d.directionsPb),
                 directionsPlaceGroup = str("directionsPlaceGroup", d.directionsPlaceGroup),
+                // Empty is kept: it turns the two-wheeler request off.
+                directionsTwoWheeler = (o["directionsTwoWheeler"] as? JsonPrimitive)?.content ?: d.directionsTwoWheeler,
                 reviewsEndpoint = str("reviewsEndpoint", d.reviewsEndpoint),
                 reviewsPb = str("reviewsPb", d.reviewsPb),
                 sessionWarmUrl = str("sessionWarmUrl", d.sessionWarmUrl),
