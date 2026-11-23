@@ -129,8 +129,8 @@ What Vela Maps does today, one line per feature. How each one works is in [SPEC.
 - Avoid tolls, highways, ferries or cameras. Set Leave now, Depart at or Arrive by.
 - When the fastest drive may use a toll road, the chooser also lists the same trip without tolls,
   each with its time and distance. "No-toll route option" turns it off.
-- Motorcycle mode (Settings > Navigation): a Motorcycle chip on the route card keeps drives off
-  roads closed to motorcycles, offline where a region is downloaded. A two-wheeler link turns it on.
+- Motorcycle mode (Settings > Navigation): a Motorcycle tab beside Drive keeps the trip off roads
+  closed to motorcycles, offline where a region is downloaded. A two-wheeler link picks it.
 - Walking uses the open foot router. "Bike routes prefer bike lanes and quiet streets" is on by
   default.
 - Ride a GPX track: open or share a `.gpx` file with Vela and the trip to its end follows the

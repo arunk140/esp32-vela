@@ -1519,11 +1519,14 @@ through the driving chain without the hybrid.
 
 #### Motorcycle
 
-Settings > Navigation > "Motorcycle mode" (`Motorcycle.shown`, off by default) puts a
-Motorcycle chip before the Avoid chips on the route card. The chip (`Motorcycle.on`) is sticky
-like them. `RoutingPrefs.motorcycle` is on while both are, so planning, reroutes, Android Auto
-and the nav device's Home and Work all read it. A tap on the chip routes the open trip again
-(`RouteActions.vehicleChanged`), and the mode chips' cached times are keyed on it.
+Settings > Navigation > "Motorcycle mode" (`Motorcycle.shown`, off by default) adds a Motorcycle
+tab after Drive in the route card's mode tabs (`modeTabs`). Motorcycle and Drive are both
+`TravelMode.DRIVE`; the tab picked is `Motorcycle.on`, kept across trips. `RoutingPrefs.motorcycle`
+is on while both are, so planning, reroutes, Android Auto and the nav device's Home and Work all
+read it. A tap between Drive and Motorcycle routes the open drive again
+(`RouteActions.vehicleChanged`); from another mode it sets the flag and then the mode, so the
+drive is routed once (`pickModeTab`). The drive's time shows on whichever of the two tabs is
+current, and the mode times are cached per value of the flag.
 
 A drive in motorcycle mode goes to `motorcycleRoutes` instead of the driving chain. Google is
 not asked: its keyless directions have no motorcycle mode. Two routers are asked at once:
@@ -1541,8 +1544,8 @@ These routes carry no traffic. When neither answers, the driving chain's routes 
 tagged `motorcycleNotHonored`, and the card says they are car routes.
 
 A link asks for the mode too (`MapLink.motorcycle`): `travelmode=two-wheeler` and
-`google.navigation:...&mode=l` turn the chip on, `travelmode=driving`, `mode=d` and `dirflg=d`
-turn it off. A link changes the chip only while the setting shows it.
+`google.navigation:...&mode=l` pick Motorcycle, `travelmode=driving`, `mode=d` and `dirflg=d`
+pick Drive. A link changes it only while the setting shows the tab.
 
 #### Riding a GPX track
 

@@ -579,6 +579,7 @@
     <string name="place_mode_transit">Transit</string>
     <string name="place_mode_walk">Walk</string>
     <string name="place_mode_bike">Bike</string>
+    <string name="place_mode_motorcycle">Motorcycle</string>
     <string name="place_finding_route">Finding the best route…</string>
     <string name="place_start">Start</string>
     <string name="place_steps">Steps</string>
@@ -1412,7 +1413,7 @@
     <string name="settings_turn_declutter_hint">While the map swings through a turn, only street names stay on it. Places, signs and cameras come back as soon as it settles. Keeps turns smooth on slower phones.</string>
     <string name="settings_route_trail_hint">Keeps the part of the route you have already driven drawn in gray behind the arrow. Off hides it, so only the road ahead is drawn.</string>
     <string name="settings_motorcycle_mode">Motorcycle mode</string>
-    <string name="settings_motorcycle_mode_hint">Shows a Motorcycle chip on the route card. With it on, drive routes keep off roads closed to motorcycles, using the offline map where you have one downloaded, otherwise an open router online. Google is not asked, so these routes have no live traffic.</string>
+    <string name="settings_motorcycle_mode_hint">Adds a Motorcycle tab next to Drive on the route card. Motorcycle routes keep off roads closed to motorcycles, using the offline map where you have one downloaded, otherwise an open router online. Google is not asked, so these routes have no live traffic.</string>
     <string name="settings_bike_safe">Bike routes prefer bike lanes and quiet streets</string>
     <string name="settings_bike_safe_hint">Cycling routes favor signed cycle routes, bike lanes and residential streets over the fastest road, the way Google routes bikes. Uses the offline map where you have one downloaded, otherwise an open router online. Off gives the plain fastest bike route.</string>
     <string name="settings_route_picker">Google-style route picker</string>
@@ -1616,7 +1617,6 @@
     <string name="place_avoid_short_highways">Highways</string>
     <string name="place_avoid_short_ferries">Ferries</string>
     <string name="place_avoid_short_cameras">Cameras</string>
-    <string name="place_motorcycle_chip">Motorcycle</string>
     <string name="place_motorcycle_not_honored">These are car routes and may use a road closed to motorcycles: no motorcycle route could be found. Download this area to plan motorcycle routes offline.</string>
     <string name="trip_shortcut_themed">Match themed icons</string>
     <string name="settings_device">Nav device</string>

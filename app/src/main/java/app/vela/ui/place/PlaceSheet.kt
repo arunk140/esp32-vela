@@ -1829,23 +1829,21 @@ fun DirectionsPanel(
                 Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                listOf(
-                    Triple(TravelMode.DRIVE, stringResource(R.string.place_mode_drive), Sym.DirectionsCar),
-                    Triple(TravelMode.TRANSIT, stringResource(R.string.place_mode_transit), Sym.DirectionsBus),
-                    Triple(TravelMode.WALK, stringResource(R.string.place_mode_walk), Sym.DirectionsWalk),
-                    Triple(TravelMode.BICYCLE, stringResource(R.string.place_mode_bike), Sym.DirectionsBike),
-                ).forEach { (mode, label, icon) ->
+                val context = androidx.compose.ui.platform.LocalContext.current
+                modeTabs().forEach { tab ->
+                    val mode = tab.mode
+                    val label = stringResource(tab.label)
                     // Google-style mode pills: stadium shape + a mode glyph, not bare squarish chips.
                     // Once a mode's time is known the chip shows THAT ("25 min") and the glyph says
                     // which mode, as Google's do; the mode name stays as the accessibility name.
-                    val eta = modeEtas[mode]
+                    val eta = modeEtas[mode]?.takeIf { mode != TravelMode.DRIVE || tab.motorcycle == app.vela.ui.Motorcycle.active }
                     FilterChip(
-                        selected = currentMode == mode,
-                        onClick = { onModeSelected(mode) },
+                        selected = tab.isCurrent(currentMode),
+                        onClick = { pickModeTab(context, tab, currentMode, onModeSelected) },
                         label = { Text(eta ?: label) },
-                        leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        leadingIcon = { Icon(tab.icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
                         shape = androidx.compose.foundation.shape.CircleShape,
-                        modifier = (if (mode == TravelMode.DRIVE) Modifier.focusRequester(dirAutoFocus) else Modifier)
+                        modifier = (if (mode == TravelMode.DRIVE && !tab.motorcycle) Modifier.focusRequester(dirAutoFocus) else Modifier)
                             .semantics { contentDescription = if (eta != null) "$label, $eta" else label },
                     )
                 }
@@ -1914,7 +1912,6 @@ fun DirectionsPanel(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    MotorcycleChip()
                     Text(stringResource(R.string.place_avoid_label), style = MaterialTheme.typography.labelLarge, color = dim)
                     FilterChip(
                         selected = avoidTolls,

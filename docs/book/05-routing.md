@@ -418,8 +418,8 @@ Bike routes carry no traffic.
 
 ### Motorcycles
 
-Settings > Navigation > "Motorcycle mode" puts a Motorcycle chip on the route card. With the
-chip on, a drive keeps off roads that OpenStreetMap closes to motorcycles, such as an
+Settings > Navigation > "Motorcycle mode" adds a Motorcycle tab after Drive on the route card.
+A motorcycle trip keeps off roads that OpenStreetMap closes to motorcycles, such as an
 expressway tagged `motorcycle=no`. Google's keyless directions have no motorcycle mode, so it is
 not asked. Two routers are asked at once:
 
@@ -432,7 +432,7 @@ not asked. Two routers are asked at once:
 
 When neither answers, the drive gets a car route and the card says it may use a road closed to
 motorcycles. Motorcycle routes carry no traffic. A Google Maps link that asks for a two-wheeler
-turns the chip on; one that asks for a car turns it off. The chip state reaches reroutes,
+picks Motorcycle; one that asks for a car picks Drive. The choice reaches reroutes,
 Android Auto, and the Home and Work buttons on a nav device.
 
 ### Riding a GPX track

@@ -474,7 +474,6 @@ fun GoogleStyleDirectionsPanel(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    MotorcycleChip()
                                     // One "Avoid" label and four short chips: with "Avoid" on every
                                     // chip the fourth sat off the edge of a phone, unseen.
                                     Text(stringResource(R.string.place_avoid_label), style = MaterialTheme.typography.labelLarge, color = dim)
@@ -634,20 +633,21 @@ internal fun ModeTabs(
     /** D-pad: where focus lands when the panel opens (the Drive tab). */
     firstFocus: androidx.compose.ui.focus.FocusRequester? = null,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     Row(modifier.horizontalScroll(rememberScrollState()).padding(start = 8.dp)) {
-        listOf(
-            Triple(TravelMode.DRIVE, R.string.place_mode_drive, Sym.DirectionsCar),
-            Triple(TravelMode.TRANSIT, R.string.place_mode_transit, Sym.DirectionsBus),
-            Triple(TravelMode.WALK, R.string.place_mode_walk, Sym.DirectionsWalk),
-            Triple(TravelMode.BICYCLE, R.string.place_mode_bike, Sym.DirectionsBike),
-        ).forEach { (mode, label, icon) ->
-            val sel = mode == currentMode
+        modeTabs().forEach { tab ->
+            val mode = tab.mode
+            val label = tab.label
+            val icon = tab.icon
+            val sel = tab.isCurrent(currentMode)
             val tint = if (sel) MaterialTheme.colorScheme.primary else ink
+            // The drive's time is on whichever of Drive and Motorcycle the drive is now.
+            val eta = modeEtas[mode]?.takeIf { mode != TravelMode.DRIVE || tab.motorcycle == app.vela.ui.Motorcycle.active }
             Column(
-                (if (mode == TravelMode.DRIVE && firstFocus != null) Modifier.focusRequester(firstFocus) else Modifier)
+                (if (mode == TravelMode.DRIVE && !tab.motorcycle && firstFocus != null) Modifier.focusRequester(firstFocus) else Modifier)
                     .clip(RoundedCornerShape(8.dp))
                     .dpadHighlight(RoundedCornerShape(8.dp))
-                    .clickable { onModeSelected(mode) }
+                    .clickable { pickModeTab(context, tab, currentMode, onModeSelected) }
                     .padding(horizontal = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -655,7 +655,7 @@ internal fun ModeTabs(
                     Icon(icon, contentDescription = stringResource(label), tint = tint, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        modeEtas[mode] ?: stringResource(label),
+                        eta ?: stringResource(label),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
                         color = tint,
@@ -698,24 +698,30 @@ internal fun SavedRouteChip(name: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** The route card's Motorcycle chip, shown while Settings > Navigation > "Motorcycle mode" is on.
- *  On, the drive routes keep off roads closed to motorcycles ([app.vela.ui.Motorcycle]); a tap
- *  routes the trip again. Nothing when the setting is off. */
+/** One of the route card's travel tabs. [motorcycle] marks the Motorcycle tab, a drive with
+ *  [app.vela.ui.Motorcycle] on; the Drive tab is a drive with it off. */
+internal class ModeTab(val mode: TravelMode, val motorcycle: Boolean, val label: Int, val icon: androidx.compose.ui.graphics.vector.ImageVector)
+
+/** The four travel modes, with Motorcycle after Drive while Settings > Navigation shows it. */
 @Composable
-internal fun MotorcycleChip() {
-    if (!app.vela.ui.Motorcycle.shown.value) return
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val on = app.vela.ui.Motorcycle.on.value
-    FilterChip(
-        selected = on,
-        onClick = {
-            app.vela.ui.Motorcycle.setOn(context, !on)
-            app.vela.ui.RouteActions.vehicleChanged?.invoke()
-        },
-        label = { Text(stringResource(R.string.place_motorcycle_chip)) },
-        shape = CircleShape,
-        modifier = Modifier.dpadHighlight(CircleShape),
-    )
+internal fun modeTabs(): List<ModeTab> = buildList {
+    add(ModeTab(TravelMode.DRIVE, false, R.string.place_mode_drive, Sym.DirectionsCar))
+    if (app.vela.ui.Motorcycle.shown.value) add(ModeTab(TravelMode.DRIVE, true, R.string.place_mode_motorcycle, Sym.TwoWheeler))
+    add(ModeTab(TravelMode.TRANSIT, false, R.string.place_mode_transit, Sym.DirectionsBus))
+    add(ModeTab(TravelMode.WALK, false, R.string.place_mode_walk, Sym.DirectionsWalk))
+    add(ModeTab(TravelMode.BICYCLE, false, R.string.place_mode_bike, Sym.DirectionsBike))
+}
+
+/** The tab that stands for the trip on screen: Drive and Motorcycle split the drive by the mode. */
+internal fun ModeTab.isCurrent(current: TravelMode): Boolean =
+    mode == current && (mode != TravelMode.DRIVE || motorcycle == app.vela.ui.Motorcycle.active)
+
+/** A tap on [tab]. Between Drive and Motorcycle it sets the mode and routes the drive again;
+ *  from another mode it sets the mode first, so the drive is routed once, the right way. */
+internal fun pickModeTab(context: android.content.Context, tab: ModeTab, current: TravelMode, onModeSelected: (TravelMode) -> Unit) {
+    val switch = tab.mode == TravelMode.DRIVE && app.vela.ui.Motorcycle.shown.value && tab.motorcycle != app.vela.ui.Motorcycle.on.value
+    if (switch) app.vela.ui.Motorcycle.setOn(context, tab.motorcycle)
+    if (switch && current == TravelMode.DRIVE) app.vela.ui.RouteActions.vehicleChanged?.invoke() else onModeSelected(tab.mode)
 }
 
 /** Under the route card's chips: motorcycle mode is on but no motorcycle router answered, so these

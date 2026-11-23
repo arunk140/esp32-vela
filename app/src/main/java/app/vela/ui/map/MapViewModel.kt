@@ -3532,7 +3532,7 @@ class MapViewModel @Inject constructor(
         val mids = all.filter { !it.via }
         LinkTrip.view.value = LinkTrip.View(start?.let { LinkTrip.Row(it.label) }, mids.map { LinkTrip.Row(it.label) }, LinkTrip.Row(link.label))
         linkTripFor = null
-        // A two-wheeler link turns the Motorcycle chip on, a car link turns it off, while Settings shows it.
+        // A two-wheeler link picks the Motorcycle tab, a car link picks Drive, while Settings shows the tab.
         link.motorcycle?.let { if (app.vela.ui.Motorcycle.shown.value) app.vela.ui.Motorcycle.setOn(appContext, it) }
         val mode = link.mode ?: stickyTravelMode()
         val (avTolls, avHighways, avFerries) = stickyAvoid()

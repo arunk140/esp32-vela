@@ -5,9 +5,9 @@ import androidx.compose.runtime.mutableStateOf
 import app.vela.core.data.RoutingPrefs
 
 /**
- * Motorcycle mode. [shown] is the Settings > Navigation switch that puts a Motorcycle chip on the
- * route card; [on] is that chip, sticky like the avoid chips beside it. Drive routes keep off roads
- * closed to motorcycles only while both are on: mirrored into [RoutingPrefs.motorcycle], which the
+ * Motorcycle mode. [shown] is the Settings > Navigation switch that adds a Motorcycle tab after
+ * Drive on the route card; [on] is which of the two is picked, kept across trips. Drive routes keep
+ * off roads closed to motorcycles only while both are on: mirrored into [RoutingPrefs.motorcycle], which the
  * directions engine reads for planning, every reroute, the car screen and the nav device's
  * Home and Work.
  */

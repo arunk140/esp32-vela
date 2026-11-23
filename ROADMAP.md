@@ -266,7 +266,7 @@ off the list when it has been.
 - Motorcycle mode (SPEC 4.3, Motorcycle): the offline motorcycle profile is unit-tested and
   Valhalla's motorcycle costing answered a Davis trip. Not yet driven, and not yet seen to route
   round a road tagged `motorcycle=no` on a phone, offline or online. Plan a trip across a
-  motorcycle-banned expressway with the chip on and off and compare; time a long offline
+  motorcycle-banned expressway on the Motorcycle and Drive tabs and compare; time a long offline
   motorcycle trip, which runs without the region's shortcuts and may outrun its 10 s.
 
 - Louder and Loudest for a voice from the phone's engine (`SystemVoiceBoost`, a
