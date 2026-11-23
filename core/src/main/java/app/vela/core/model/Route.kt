@@ -205,7 +205,7 @@ enum class RouteSource {
     OBF,
     /** On-device GraphHopper graph (the retired offline engine; kept so old trip files read back). */
     GRAPHHOPPER,
-    /** The FOSSGIS Valhalla bicycle profile (the bike-safe setting). */
+    /** The FOSSGIS Valhalla service: bike-safe routes and motorcycle mode. */
     VALHALLA,
     /** A route read back from a trip file that predates the source field. */
     UNKNOWN,
@@ -251,6 +251,9 @@ data class Route(
     // toggled-on avoid is never silently ignored (the Reddit "still routed me through the
     // motorway" report).
     val avoidNotHonored: Boolean = false,
+    /** Motorcycle mode was on but neither motorcycle router answered: this is a car route, which can
+     *  use a road closed to motorcycles. The picker says so (RoutingPrefs.motorcycle). */
+    val motorcycleNotHonored: Boolean = false,
     // Computed ON THE PHONE from a downloaded region (no network, or an avoid toggle Google could
     // not honor). The picker says so instead of a traffic word: an offline route has no live
     // traffic and the user should know which kind they are looking at (issue #350).

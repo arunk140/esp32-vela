@@ -474,6 +474,7 @@ fun GoogleStyleDirectionsPanel(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
+                                    MotorcycleChip()
                                     // One "Avoid" label and four short chips: with "Avoid" on every
                                     // chip the fourth sat off the edge of a phone, unseen.
                                     Text(stringResource(R.string.place_avoid_label), style = MaterialTheme.typography.labelLarge, color = dim)
@@ -497,6 +498,7 @@ fun GoogleStyleDirectionsPanel(
                                     )
                                     AvoidCamerasChip()
                                 }
+                                MotorcycleNote(routes, ink, Modifier.padding(start = 20.dp, end = 16.dp, top = 8.dp))
                                 if ((avoidTolls || avoidHighways || avoidFerries) && routes.isNotEmpty() && routes.all { it.avoidNotHonored }) {
                                     Row(Modifier.padding(start = 20.dp, end = 16.dp, top = 8.dp), verticalAlignment = Alignment.Top) {
                                         Icon(SymOutlined.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
@@ -693,6 +695,38 @@ internal fun SavedRouteChip(name: String, modifier: Modifier = Modifier) {
             maxLines = 1,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         )
+    }
+}
+
+/** The route card's Motorcycle chip, shown while Settings > Navigation > "Motorcycle mode" is on.
+ *  On, the drive routes keep off roads closed to motorcycles ([app.vela.ui.Motorcycle]); a tap
+ *  routes the trip again. Nothing when the setting is off. */
+@Composable
+internal fun MotorcycleChip() {
+    if (!app.vela.ui.Motorcycle.shown.value) return
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val on = app.vela.ui.Motorcycle.on.value
+    FilterChip(
+        selected = on,
+        onClick = {
+            app.vela.ui.Motorcycle.setOn(context, !on)
+            app.vela.ui.RouteActions.vehicleChanged?.invoke()
+        },
+        label = { Text(stringResource(R.string.place_motorcycle_chip)) },
+        shape = CircleShape,
+        modifier = Modifier.dpadHighlight(CircleShape),
+    )
+}
+
+/** Under the route card's chips: motorcycle mode is on but no motorcycle router answered, so these
+ *  are car routes ([app.vela.core.model.Route.motorcycleNotHonored]). */
+@Composable
+internal fun MotorcycleNote(routes: List<app.vela.core.model.Route>, ink: androidx.compose.ui.graphics.Color, modifier: Modifier) {
+    if (!app.vela.ui.Motorcycle.active || routes.isEmpty() || !routes.all { it.motorcycleNotHonored }) return
+    Row(modifier, verticalAlignment = Alignment.Top) {
+        Icon(SymOutlined.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(stringResource(R.string.place_motorcycle_not_honored), style = MaterialTheme.typography.bodyMedium, color = ink)
     }
 }
 

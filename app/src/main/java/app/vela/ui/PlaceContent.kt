@@ -219,6 +219,8 @@ object SavedActions {
  *  again through here; a holder so MapScreen takes no new callback (it is at the method limit). */
 object RouteActions {
     @Volatile var camerasChanged: (() -> Unit)? = null
+    /** The Motorcycle chip was tapped: the open trip is routed again. */
+    @Volatile var vehicleChanged: (() -> Unit)? = null
     /** "Add to home screen" in the route card's menu: pins the trip on screen as a shortcut. */
     @Volatile var pinTrip: ((label: String, iconKey: String, themed: Boolean) -> Unit)? = null
     /** The current trip's travel mode as a shortcut glyph key, the dialog's starting pick. */

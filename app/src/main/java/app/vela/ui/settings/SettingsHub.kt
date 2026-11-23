@@ -400,6 +400,7 @@ private val SEARCH_INDEX: List<Pair<Int, SettingsSection>> = listOf(
     R.string.settings_traffic_lights to SettingsSection.NAVIGATION,
     R.string.settings_nav_tap_places to SettingsSection.NAVIGATION,
     R.string.settings_vibrate_on_turns to SettingsSection.NAVIGATION,
+    R.string.settings_motorcycle_mode to SettingsSection.NAVIGATION,
     R.string.settings_bike_safe to SettingsSection.NAVIGATION,
     R.string.settings_confirm_end_nav to SettingsSection.NAVIGATION,
     R.string.settings_speed_display to SettingsSection.NAVIGATION,

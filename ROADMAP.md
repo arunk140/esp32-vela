@@ -263,6 +263,12 @@ Small items, one pull request each.
 Each of these passed its unit tests and has not been seen or heard where it matters. Take one
 off the list when it has been.
 
+- Motorcycle mode (SPEC 4.3, Motorcycle): the offline motorcycle profile is unit-tested and
+  Valhalla's motorcycle costing answered a Davis trip. Not yet driven, and not yet seen to route
+  round a road tagged `motorcycle=no` on a phone, offline or online. Plan a trip across a
+  motorcycle-banned expressway with the chip on and off and compare; time a long offline
+  motorcycle trip, which runs without the region's shortcuts and may outrun its 10 s.
+
 - Louder and Loudest for a voice from the phone's engine (`SystemVoiceBoost`, a
   `LoudnessEnhancer` on Vela's audio session, issue #979; SPEC 9.1): the step-to-gain mapping is
   unit-tested only. Not yet heard on a phone with Google TTS or Samsung TTS, through Bluetooth,

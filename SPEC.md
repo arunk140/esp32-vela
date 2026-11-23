@@ -1517,6 +1517,33 @@ phrased by `osrmPhrase`, so voice, banner and step list match every other route.
 carry no Google traffic. With the setting off, or when neither answers, `routed-bike` runs
 through the driving chain without the hybrid.
 
+#### Motorcycle
+
+Settings > Navigation > "Motorcycle mode" (`Motorcycle.shown`, off by default) puts a
+Motorcycle chip before the Avoid chips on the route card. The chip (`Motorcycle.on`) is sticky
+like them. `RoutingPrefs.motorcycle` is on while both are, so planning, reroutes, Android Auto
+and the nav device's Home and Work all read it. A tap on the chip routes the open trip again
+(`RouteActions.vehicleChanged`), and the mode chips' cached times are keyed on it.
+
+A drive in motorcycle mode goes to `motorcycleRoutes` instead of the driving chain. Google is
+not asked: its keyless directions have no motorcycle mode. Two routers are asked at once:
+
+- The downloaded region's car router built as its `motorcycle` variant (routing.xml
+  `derivedProfiles`; `Builder.build` sets `profile_motorcycle`), which closes ways tagged
+  `motorcycle=no` and the like. The baked highway-hierarchy shortcuts belong to the plain car
+  profile, so this search runs without them. Budget `MOTORCYCLE_ONDEVICE_TIMEOUT_MS` 10 s,
+  `MOTORCYCLE_ONDEVICE_URGENT_MS` 4 s on a reroute. Its answer wins when it comes in time.
+- Valhalla `route` with `costing: motorcycle`, `use_tracks` and `use_trails` 0, and the avoids
+  as `use_tolls`, `use_highways`, `use_ferry` 0. A trip without stops asks for two alternates. A
+  route whose summary still has an avoided road kind is tagged `avoidNotHonored`.
+
+These routes carry no traffic. When neither answers, the driving chain's routes are used and
+tagged `motorcycleNotHonored`, and the card says they are car routes.
+
+A link asks for the mode too (`MapLink.motorcycle`): `travelmode=two-wheeler` and
+`google.navigation:...&mode=l` turn the chip on, `travelmode=driving`, `mode=d` and `dirflg=d`
+turn it off. A link changes the chip only while the setting shows it.
+
 #### Riding a GPX track
 
 ```

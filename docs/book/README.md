@@ -38,7 +38,7 @@ The names the chapters use for Vela's main parts, and where each is explained.
 | `HybridRoute` | A drive on Google's line: the open router's turns where the two routes share the road, turns named from the map where they part | [5](05-routing.md) |
 | OSRM | The open router, online on the FOSSGIS server: every turn with names, exits and lanes, no traffic | [5](05-routing.md) |
 | `ObfRouteEngine` | OsmAnd's router on the phone, over the downloaded region files | [5](05-routing.md), [8](08-offline.md) |
-| Valhalla | Bike-safe routes, and fitting a line another router drew to the roads | [5](05-routing.md) |
+| Valhalla | Bike-safe and motorcycle routes, and fitting a line another router drew to the roads | [5](05-routing.md) |
 | `LineNamer`, `RoadNameTiles` | Name each stretch of Google's line from the map's vector tiles | [5](05-routing.md) |
 | `NavEngine` | Runs on each fix: where you are on the route, what to say, whether you left it | [4](04-navigation.md) |
 | `NavSession` | The one drive the phone and the car screen share: reroutes, rechecks, stops | [4](04-navigation.md) |

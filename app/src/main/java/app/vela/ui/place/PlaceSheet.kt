@@ -1914,6 +1914,7 @@ fun DirectionsPanel(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    MotorcycleChip()
                     Text(stringResource(R.string.place_avoid_label), style = MaterialTheme.typography.labelLarge, color = dim)
                     FilterChip(
                         selected = avoidTolls,
@@ -1942,6 +1943,7 @@ fun DirectionsPanel(
                 // routers cannot honor it and used to just quietly route through tolls/highways
                 // anyway - say so instead of pretending (the "still routed me through the motorway"
                 // report). Keyed on the routes' own tag so it never shows when avoid worked.
+                MotorcycleNote(routes, ink, Modifier.fillMaxWidth().padding(top = 8.dp))
                 if ((avoidTolls || avoidHighways || avoidFerries) && routes.isNotEmpty() && routes.all { it.avoidNotHonored }) {
                     // Treatment upgraded (issue #286): this is the EXPLANATION for a control that
                     // otherwise looks broken - a new user flips Avoid tolls, gets routed down the

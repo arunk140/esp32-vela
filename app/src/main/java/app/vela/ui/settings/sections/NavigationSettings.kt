@@ -175,6 +175,14 @@ internal fun NavigationSettingsScreen(vm: MapViewModel, onBack: () -> Unit) {
             hint = stringResource(R.string.settings_route_trail_hint),
         )
 
+        GroupDivider()
+        ToggleRow(
+            label = stringResource(R.string.settings_motorcycle_mode),
+            checked = app.vela.ui.Motorcycle.shown.value,
+            onCheckedChange = { app.vela.ui.Motorcycle.setShown(context, it) },
+            hint = stringResource(R.string.settings_motorcycle_mode_hint),
+        )
+
         // Bike routing preference (issue #401): safety over speed, on by default.
         GroupDivider()
         ToggleRow(

@@ -111,7 +111,10 @@ class ObfRouteEngine(private val obfRootOf: () -> File) : RouteEngine {
     }
 
     override fun route(origin: LatLng, destination: LatLng, mode: TravelMode, avoidTolls: Boolean, avoidHighways: Boolean, avoidFerries: Boolean, departBearingDeg: Double?, maxMs: Long?): List<Route> {
-        val profile = profileFor(mode) ?: return emptyList()
+        // Motorcycle mode: the car profile's motorcycle variant (routing.xml `derivedProfiles`), which
+        // closes ways tagged motorcycle=no. Builder.build finds the car router by this name.
+        val motorcycle = mode == TravelMode.DRIVE && RoutingPrefs.motorcycle
+        val profile = (if (motorcycle) MOTORCYCLE_PROFILE else profileFor(mode)) ?: return emptyList()
         val cands = candidatesFor(origin, destination, regions()) ?: return emptyList()
         val readers = cands.mapNotNull { reader(it) }
         if (readers.isEmpty()) {
@@ -126,7 +129,8 @@ class ObfRouteEngine(private val obfRootOf: () -> File) : RouteEngine {
                     // The wait for the lock counts: a caller that has already given up gets nothing started.
                     val leftMs = maxMs?.let { it - (System.currentTimeMillis() - startMs) }
                     if (leftMs != null && leftMs <= 0) return emptyList()
-                    val params = buildMap {
+                    // A mutable map: building a derived profile puts its `profile_<name>` flag in it.
+                    val params = HashMap<String, String>().apply {
                         // routing.xml parameter ids - the router excludes matching roads at
                         // calc time, no baked profiles needed (unlike the GraphHopper CH pair).
                         if (avoidTolls) put("avoid_toll", "true")
@@ -154,7 +158,9 @@ class ObfRouteEngine(private val obfRootOf: () -> File) : RouteEngine {
                     // a file baked before the avoid set costs about a second before it falls back.
                     // A file without HH, or a trip across two files, falls back to the plain
                     // search inside searchRoute on its own.
-                    if (mode == TravelMode.DRIVE || mode == TravelMode.BICYCLE) fe.setDefaultHHRoutingConfig()
+                    // The baked shortcuts are the plain car profile's: they would cross a road closed to
+                    // motorcycles, so a motorcycle trip takes the plain search.
+                    if ((mode == TravelMode.DRIVE && !motorcycle) || mode == TravelMode.BICYCLE) fe.setDefaultHHRoutingConfig()
                     val ctx = fe.buildRoutingContext(
                         config, null, readers.toTypedArray(),
                         RoutePlannerFrontEnd.RouteCalculationMode.NORMAL,
@@ -467,6 +473,9 @@ class ObfRouteEngine(private val obfRootOf: () -> File) : RouteEngine {
         /** An end of the trip farther than this from any road in the installed files is outside their data. */
         private const val ENDPOINT_SNAP_M = 2_000.0
         private const val NATIVE_MEMORY_MB = 64
+
+        /** The car profile's motorcycle variant in the vendored routing.xml. */
+        private const val MOTORCYCLE_PROFILE = "motorcycle"
 
         // routing.xml profile names.
         private fun profileFor(mode: TravelMode): String? = when (mode) {

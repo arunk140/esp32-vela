@@ -3532,6 +3532,8 @@ class MapViewModel @Inject constructor(
         val mids = all.filter { !it.via }
         LinkTrip.view.value = LinkTrip.View(start?.let { LinkTrip.Row(it.label) }, mids.map { LinkTrip.Row(it.label) }, LinkTrip.Row(link.label))
         linkTripFor = null
+        // A two-wheeler link turns the Motorcycle chip on, a car link turns it off, while Settings shows it.
+        link.motorcycle?.let { if (app.vela.ui.Motorcycle.shown.value) app.vela.ui.Motorcycle.setOn(appContext, it) }
         val mode = link.mode ?: stickyTravelMode()
         val (avTolls, avHighways, avFerries) = stickyAvoid()
         _state.update {
@@ -6241,7 +6243,7 @@ class MapViewModel @Inject constructor(
         app.vela.ui.ParkingActions.arrivedByCar = { _state.value.travelMode == TravelMode.DRIVE }
         app.vela.ui.ParkingActions.parkedAt = { _state.value.parkedAtMillis }
     }
-    init { app.vela.ui.SavedActions.rename = ::renamePlace; app.vela.ui.ShapeActions.delete = ::deleteOpenedShape; app.vela.ui.ShapeActions.edit = ::editOpenedShape; app.vela.ui.RouteActions.pinTrip = ::pinTripShortcut; app.vela.ui.RouteActions.modeKey = { app.vela.ui.TripShortcut.defaultIcon(_state.value.travelMode) }; app.vela.ui.RouteActions.camerasChanged = { if (_state.value.directionsOpen) route(_state.value.travelMode) } }
+    init { app.vela.ui.SavedActions.rename = ::renamePlace; app.vela.ui.ShapeActions.delete = ::deleteOpenedShape; app.vela.ui.ShapeActions.edit = ::editOpenedShape; app.vela.ui.RouteActions.pinTrip = ::pinTripShortcut; app.vela.ui.RouteActions.modeKey = { app.vela.ui.TripShortcut.defaultIcon(_state.value.travelMode) }; app.vela.ui.RouteActions.camerasChanged = { if (_state.value.directionsOpen) route(_state.value.travelMode) }; app.vela.ui.RouteActions.vehicleChanged = { if (_state.value.directionsOpen) route(_state.value.travelMode) } }
 
     // ---- Viewed places, kept for offline (PlaceCache; the storage and the setting are from PR #658) ----
     private fun placeCacheDir(): java.io.File = java.io.File(appContext.filesDir, "placecache")
@@ -7562,7 +7564,7 @@ class MapViewModel @Inject constructor(
 
     private fun modeEtaKeyOf(origin: LatLng, dest: LatLng, stops: List<LatLng>, avoidTolls: Boolean, avoidHighways: Boolean, avoidFerries: Boolean, timeMode: Int, timeEpochSec: Long?): String {
         val pts = (listOf(origin) + stops + dest).joinToString(";") { "%.5f,%.5f".format(java.util.Locale.US, it.lat, it.lng) }
-        return "$pts|$avoidTolls|$avoidHighways|$avoidFerries|$timeMode|$timeEpochSec|${System.currentTimeMillis() / 300_000L}"
+        return "$pts|$avoidTolls|$avoidHighways|$avoidFerries|${app.vela.core.data.RoutingPrefs.motorcycle}|$timeMode|$timeEpochSec|${System.currentTimeMillis() / 300_000L}"
     }
 
     /** Google's transit summary says "21 hr 6 min" where formatDuration says "21 h 6 min"; the chips

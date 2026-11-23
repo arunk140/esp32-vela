@@ -785,7 +785,12 @@ class GoogleMapsDataSource @Inject constructor(
         if (!app.vela.core.data.LowDataMode.enabled) kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
             runCatching { app.vela.core.data.naming.RoadNameTiles.roadsAlong(listOf(destination)) }
         }
-        val routes = directionsPlain(origin, destination, mode, waypoints, avoidTolls, avoidHighways, avoidFerries, urgent, departBearingDeg, budgetMs, behind, turnRound)
+        // Motorcycle mode: a motorcycle router's route. When neither answers, the car chain's route,
+        // marked so the picker says it may use a road closed to motorcycles.
+        val motorcycle = RoutingPrefs.motorcycle
+        val routes = (if (motorcycle) motorcycleRoutes(origin, destination, waypoints, avoidTolls, avoidHighways, avoidFerries, urgent, departBearingDeg) else null)
+            ?: directionsPlain(origin, destination, mode, waypoints, avoidTolls, avoidHighways, avoidFerries, urgent, departBearingDeg, budgetMs, behind, turnRound)
+                .let { rs -> if (motorcycle) rs.map { it.copy(motorcycleNotHonored = true) } else rs }
         // Off the caller's thread (the view model calls from Main): the tiles' protobuf is
         // decoded here. Every route at once, so a tile host that does not answer costs one wait.
         return io { coroutineScope { routes.map { r -> async { withLotTurn(onLine(r), urgent) } }.awaitAll() } }.also { rs ->
@@ -1842,6 +1847,55 @@ class GoogleMapsDataSource @Inject constructor(
         return null
     }
 
+    /**
+     * Motorcycle mode's routes (RoutingPrefs.motorcycle): the downloaded region's motorcycle
+     * profile and Valhalla's `motorcycle` costing, asked together. The region's answer wins when it
+     * comes inside its budget, as for bike-safe routes; otherwise Valhalla's. Null when neither
+     * answered. Google is not asked: its keyless directions have no motorcycle mode.
+     */
+    private suspend fun motorcycleRoutes(
+        origin: LatLng,
+        destination: LatLng,
+        waypoints: List<LatLng>,
+        avoidTolls: Boolean,
+        avoidHighways: Boolean,
+        avoidFerries: Boolean,
+        urgent: Boolean,
+        departBearingDeg: Double?,
+    ): List<Route>? = io {
+        val mode = TravelMode.DRIVE
+        val points = listOf(origin) + waypoints + destination
+        val scope = kotlinx.coroutines.CoroutineScope(Dispatchers.IO)
+        val onlineD = scope.async {
+            runCatching {
+                ValhallaRouter.motorcycleRoute(http, points, alternates = waypoints.isEmpty(), avoidTolls, avoidHighways, avoidFerries, tries = if (urgent) 1 else 2)
+            }.getOrDefault(emptyList())
+        }
+        if (routeEngine.isReady(mode) && routeEngine.covers(origin, destination, mode)) {
+            val budget = if (urgent) MOTORCYCLE_ONDEVICE_URGENT_MS else MOTORCYCLE_ONDEVICE_TIMEOUT_MS
+            // Unstructured, so the deadline can walk away from the native search (it outlives a timeout).
+            val onDeviceD = scope.async {
+                runCatching {
+                    if (waypoints.isEmpty()) routeEngine.route(origin, destination, mode, avoidTolls, avoidHighways, avoidFerries, departBearingDeg, maxMs = budget).map { it.copy(offline = true) }
+                    else listOfNotNull(chainOnDevice(points, mode, avoidTolls, avoidHighways, avoidFerries, departBearingDeg, maxMs = budget)?.copy(offline = true))
+                }.getOrDefault(emptyList())
+            }
+            val onDevice = kotlinx.coroutines.withTimeoutOrNull(budget) { onDeviceD.await() }.orEmpty()
+            if (onDevice.isNotEmpty()) {
+                onlineD.cancel()
+                diag.record("directions", "MOTORCYCLE → on-device ${onDevice.size} routes / ${onDevice.first().maneuvers.size} steps", "")
+                return@io onDevice
+            }
+        }
+        val online = onlineD.await()
+        if (online.isNotEmpty()) {
+            diag.record("directions", "MOTORCYCLE → valhalla ${online.size} routes / ${online.first().maneuvers.size} steps", "")
+            return@io online
+        }
+        diag.record("directions", "MOTORCYCLE → nothing answered, falling to the car chain", "")
+        null
+    }
+
     /** True when [RouteGeometry.spurAt] finds a spur on [route] AND one of the route's own
      *  maneuvers within [SPUR_TURN_NEAR_M] of it is a turn or U-turn. */
     /**
@@ -2375,6 +2429,10 @@ class GoogleMapsDataSource @Inject constructor(
          *  engine usually answers well inside these; past them the online router takes over. */
         const val BIKE_ONDEVICE_TIMEOUT_MS = 6_000L
         const val BIKE_ONDEVICE_URGENT_MS = 3_000L
+        /** Motorcycle mode's on-device budgets. Longer than a bike's: a motorcycle trip can be long
+         *  and takes the plain search, the baked car shortcuts being closed to it. */
+        const val MOTORCYCLE_ONDEVICE_TIMEOUT_MS = 10_000L
+        const val MOTORCYCLE_ONDEVICE_URGENT_MS = 4_000L
         // Fallback viewport when no user location is available — search is
         // viewport-driven and needs one. Callers normally pass the real location.
         val DEFAULT_VIEWPORT = LatLng(37.7749, -122.4194)

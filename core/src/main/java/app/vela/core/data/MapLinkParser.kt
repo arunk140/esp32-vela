@@ -13,6 +13,9 @@ data class MapLink(
     val origin: MapLink? = null,
     /** The travel mode the link asked for, when it asked. */
     val mode: TravelMode? = null,
+    /** True for a two-wheeler trip, false for a car trip, null when the link did not say. Both are
+     *  [TravelMode.DRIVE]; the app's motorcycle mode follows this when it is shown. */
+    val motorcycle: Boolean? = null,
     /** The places a directions link passes through between its start and its end, in order.
      *  One marked [via] only shapes the route (a point dragged onto it on a desktop). */
     val stops: List<MapLink> = emptyList(),
@@ -115,10 +118,11 @@ object MapLinkParser {
         // The parameters follow the colon, with or without a "?" ("google.navigation:q=X&mode=w").
         val params = "?" + raw.substringAfter(':').removePrefix("?")
         val dest = endpoint(queryParam(params, "q") ?: queryParam(params, "ll")) ?: return null
-        val mode = when (queryParam(params, "mode")?.lowercase()) {
+        val flag = queryParam(params, "mode")?.lowercase()
+        val mode = when (flag) {
             "w" -> TravelMode.WALK; "b" -> TravelMode.BICYCLE; "d", "l" -> TravelMode.DRIVE; else -> null
         }
-        return dest.copy(directions = true, mode = mode)
+        return dest.copy(directions = true, mode = mode, motorcycle = when (flag) { "l" -> true; "d" -> false; else -> null })
     }
 
     /** The web directions forms; null when [raw] is not one, so the place/search parse runs. */
@@ -133,18 +137,19 @@ object MapLinkParser {
             val mode = when (queryParam(raw, "dirflg")?.lowercase()?.firstOrNull { it in "dwbr" }) {
                 'w' -> TravelMode.WALK; 'b' -> TravelMode.BICYCLE; 'r' -> TravelMode.TRANSIT; 'd' -> TravelMode.DRIVE; else -> null
             }
-            return dest.copy(directions = true, origin = endpoint(queryParam(raw, "saddr")), mode = mode, stops = chain.dropLast(1).mapNotNull { endpoint(it) })
+            return dest.copy(directions = true, origin = endpoint(queryParam(raw, "saddr")), mode = mode, motorcycle = if (mode == TravelMode.DRIVE) false else null, stops = chain.dropLast(1).mapNotNull { endpoint(it) })
         }
         if ("/dir/" !in raw && !raw.substringBefore('?').endsWith("/dir")) return null
         val mode = when (queryParam(raw, "travelmode")?.lowercase()) {
             "walking" -> TravelMode.WALK; "bicycling" -> TravelMode.BICYCLE; "transit" -> TravelMode.TRANSIT
             "driving", "two-wheeler" -> TravelMode.DRIVE; else -> null
         }
+        val motorcycle = when (queryParam(raw, "travelmode")?.lowercase()) { "two-wheeler" -> true; "driving" -> false; else -> null }
         // Maps URLs API: /maps/dir/?api=1&destination=B&origin=A&waypoints=C|D&travelmode=walking
         queryParam(raw, "destination")?.let { d ->
             val dest = endpoint(d) ?: return null
             val stops = queryParam(raw, "waypoints")?.split(WAYPOINT_SEP)?.mapNotNull { endpoint(it) }.orEmpty()
-            return dest.copy(directions = true, origin = endpoint(queryParam(raw, "origin")), mode = mode, stops = stops)
+            return dest.copy(directions = true, origin = endpoint(queryParam(raw, "origin")), mode = mode, motorcycle = motorcycle, stops = stops)
         }
         // Path form: /maps/dir/A/B/C/@lat,lng,z/data=... (an empty A = "from where I am"). The
         // first is the start, the last the end, any between are stops.
@@ -173,7 +178,7 @@ object MapLinkParser {
         val blobMode = when (DATA_MODE.find(raw.substringAfter("/data=", ""))?.groupValues?.get(1)) {
             "0" -> TravelMode.DRIVE; "1" -> TravelMode.BICYCLE; "2" -> TravelMode.WALK; "3" -> TravelMode.TRANSIT; else -> null
         }
-        return dest.copy(directions = true, origin = origin, mode = mode ?: blobMode, stops = stops)
+        return dest.copy(directions = true, origin = origin, mode = mode ?: blobMode, motorcycle = motorcycle, stops = stops)
     }
 
     /** Between the stops of a Maps URLs `waypoints`: a pipe, plain or encoded. */

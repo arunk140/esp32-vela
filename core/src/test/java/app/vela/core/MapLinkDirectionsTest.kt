@@ -220,4 +220,19 @@ class MapLinkDirectionsTest {
         assertTrue(l.stops[0].via)
         assertEquals(38.62, l.stops[0].lat!!, 1e-9)
     }
+
+    @Test fun `a two wheeler link is a drive with motorcycle on, a car link turns it off`() {
+        val bike = MapLinkParser.parse("https://www.google.com/maps/dir/?api=1&destination=1451%20W%20Covell%20Blvd%2C%20Davis&travelmode=two-wheeler")!!
+        assertEquals(TravelMode.DRIVE, bike.mode)
+        assertEquals(true, bike.motorcycle)
+        val car = MapLinkParser.parse("https://www.google.com/maps/dir/?api=1&destination=1451%20W%20Covell%20Blvd%2C%20Davis&travelmode=driving")!!
+        assertEquals(false, car.motorcycle)
+        val plain = MapLinkParser.parse("https://www.google.com/maps/dir/?api=1&destination=1451%20W%20Covell%20Blvd%2C%20Davis")!!
+        assertEquals(null, plain.motorcycle)
+        val nav = MapLinkParser.parse("google.navigation:q=2000+Sutter+Pl,+Davis,+CA&mode=l")!!
+        assertEquals(TravelMode.DRIVE, nav.mode)
+        assertEquals(true, nav.motorcycle)
+        assertEquals(false, MapLinkParser.parse("google.navigation:q=2000+Sutter+Pl,+Davis,+CA&mode=d")!!.motorcycle)
+        assertEquals(null, MapLinkParser.parse("google.navigation:q=2000+Sutter+Pl,+Davis,+CA&mode=w")!!.motorcycle)
+    }
 }

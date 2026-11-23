@@ -416,6 +416,25 @@ default, `RoutingPrefs.bikeSafe`), a bike trip is routed for safety:
 
 Bike routes carry no traffic.
 
+### Motorcycles
+
+Settings > Navigation > "Motorcycle mode" puts a Motorcycle chip on the route card. With the
+chip on, a drive keeps off roads that OpenStreetMap closes to motorcycles, such as an
+expressway tagged `motorcycle=no`. Google's keyless directions have no motorcycle mode, so it is
+not asked. Two routers are asked at once:
+
+1. The on-phone car router in its motorcycle variant, where a region covers the trip. It runs
+   without the region's baked shortcuts, which were built for cars and would cross a closed
+   road. It gets 10 s, or 4 s on a reroute, and its route wins when it comes in time.
+2. Valhalla with motorcycle costing, which also keeps off tracks and trails. A trip without
+   stops gets two alternates. The avoid chips are preferences there, and a route that still
+   uses an avoided road kind says so.
+
+When neither answers, the drive gets a car route and the card says it may use a road closed to
+motorcycles. Motorcycle routes carry no traffic. A Google Maps link that asks for a two-wheeler
+turns the chip on; one that asks for a car turns it off. The chip state reaches reroutes,
+Android Auto, and the Home and Work buttons on a nav device.
+
 ### Riding a GPX track
 
 Open or share a `.gpx` file with Vela and it plans a bike trip from the start of the track to

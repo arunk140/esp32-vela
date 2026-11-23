@@ -79,6 +79,57 @@ object ValhallaRouter {
             put("units", "kilometers")
             if (alternates && points.size == 2) put("alternates", 2)
         }.toString()
+        return post(http, body, tries)
+    }
+
+    /**
+     * Motorcycle route(s) through [points] (origin, stops, destination): the `motorcycle` costing
+     * keeps off ways OpenStreetMap closes to motorcycles. The avoid toggles map to its `use_*`
+     * knobs, which are preferences: the trip summary says whether a route still used one
+     * ([usesAvoided]), and such a route is marked [Route.avoidNotHonored]. Alternates only for a
+     * plain origin-to-destination trip. Empty on any failure.
+     */
+    fun motorcycleRoute(
+        http: OkHttpClient, points: List<LatLng>, alternates: Boolean,
+        avoidTolls: Boolean, avoidHighways: Boolean, avoidFerries: Boolean, tries: Int = 2,
+    ): List<Route> {
+        if (points.size < 2) return emptyList()
+        val body = buildJsonObject {
+            putJsonArray("locations") {
+                points.forEachIndexed { i, p ->
+                    add(buildJsonObject {
+                        put("lat", p.lat); put("lon", p.lng)
+                        if (i in 1 until points.lastIndex) put("type", "through")
+                    })
+                }
+            }
+            put("costing", "motorcycle")
+            putJsonObject("costing_options") {
+                putJsonObject("motorcycle") {
+                    put("use_tracks", 0.0)
+                    put("use_trails", 0.0)
+                    if (avoidTolls) put("use_tolls", 0.0)
+                    if (avoidHighways) put("use_highways", 0.0)
+                    if (avoidFerries) put("use_ferry", 0.0)
+                }
+            }
+            put("units", "kilometers")
+            if (alternates && points.size == 2) put("alternates", 2)
+        }.toString()
+        val text = postText(http, body, tries) ?: return emptyList()
+        val routes = runCatching { parse(text) }.getOrDefault(emptyList())
+        if (!(avoidTolls || avoidHighways || avoidFerries) || !usesAvoided(text, avoidTolls, avoidHighways, avoidFerries)) return routes
+        // The flags describe the first trip; the alternates are marked with it.
+        return routes.map { it.copy(avoidNotHonored = true) }
+    }
+
+    /** The routes of a `/route` request, retried on a network failure. Empty on any failure. */
+    private fun post(http: OkHttpClient, body: String, tries: Int): List<Route> =
+        postText(http, body, tries)?.let { runCatching { parse(it) }.getOrNull() }.orEmpty()
+
+    /** The reply text of a `/route` request, retried on a network failure; null on a refusal or
+     *  when every try failed. */
+    private fun postText(http: OkHttpClient, body: String, tries: Int): String? {
         val req = Request.Builder()
             .url(BASE)
             .header("User-Agent", VelaConfig.USER_AGENT)
@@ -87,17 +138,15 @@ object ValhallaRouter {
         repeat(tries) { attempt ->
             try {
                 http.newCall(req).execute().use { resp ->
-                    if (resp.isSuccessful) {
-                        return parse(resp.body?.string().orEmpty())
-                    }
-                    if (resp.code in 400..499) return emptyList()
+                    if (resp.isSuccessful) return resp.body?.string().orEmpty()
+                    if (resp.code in 400..499) return null
                 }
             } catch (e: Exception) {
                 // network blip: retry
             }
             if (attempt < tries - 1) runCatching { Thread.sleep(200L * (attempt + 1)) }
         }
-        return emptyList()
+        return null
     }
 
     /**
