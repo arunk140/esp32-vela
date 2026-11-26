@@ -531,6 +531,10 @@ class NavSession @Inject constructor(
      *  VISIBLE ones: a silent detour via is routed through but is not a stop to anyone. */
     fun remainingStops(): List<NavStop> = synchronized(stopLock) { stops.drop(passedStops).filter { !it.silent } }
 
+    /** The trip's stops a rider sees (silent ones left out), passed ones included: the "of 3"
+     *  in the device's "1/3 waypoints". */
+    fun visibleStopCount(): Int = synchronized(stopLock) { stops.count { !it.silent } }
+
     /** Replace the stops still ahead with [newRemaining] (the stops editor's Done during nav,
      *  issue #402: reorder, remove, add, then ONE replan from [loc]) and replan the drive through
      *  them. The same user-ordered reroute as [addStop]: no cooldown, no back-on-course discard,
@@ -1278,7 +1282,8 @@ class NavSession @Inject constructor(
                     !app.vela.core.data.RouteGeometry.startsBehind(candidate.polyline, h) &&
                     !app.vela.core.data.RouteGeometry.goesBack(candidate.polyline, trackTo(car, h))
             }
-            val gains = if (sameCourse && candidate.drivable) RouteHeal.gains(current, candidate, lineOk) else null
+            val progressM = (current.distanceMeters - _state.value.remainingDistance).coerceAtLeast(0.0)
+            val gains = if (sameCourse && candidate.drivable) RouteHeal.gains(current, candidate, lineOk, progressM) else null
             if (gains != null) {
                 lastSwapReason = "heal"
                 adoptRecheck(candidate, candidateEta, remainingStops)

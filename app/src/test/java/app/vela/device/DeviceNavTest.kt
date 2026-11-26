@@ -1,6 +1,7 @@
 package app.vela.device
 
 import app.vela.core.model.LatLng
+import app.vela.core.model.distanceTo
 import app.vela.core.model.Maneuver
 import app.vela.core.model.ManeuverType
 import app.vela.core.model.Route
@@ -74,6 +75,24 @@ class DeviceNavTest {
         assertArrayEquals(byteArrayOf(0x02, 0), DeviceNavEncoder.text(""))
     }
 
+    @Test fun stopsAreElevenBytesPlusTheLabel() {
+        val b = ByteBuffer.wrap(DeviceNavEncoder.stops(1, 3, 2_400, 360, "Fuel")).order(ByteOrder.LITTLE_ENDIAN)
+        assertEquals(15, b.capacity())
+        assertEquals(0x09, b.get(0).toInt())
+        assertEquals(1, b.get(1).toInt())
+        assertEquals(3, b.get(2).toInt())
+        assertEquals(0, b.get(3).toInt())
+        assertEquals(2_400, b.getInt(4))
+        assertEquals(360, b.getShort(8).toInt())
+        assertEquals(4, b.get(10).toInt())
+        assertEquals("Fuel", String(b.array(), 11, 4, Charsets.UTF_8))
+        // No stops: the device clears the face; a long label is cut on a character boundary.
+        assertArrayEquals(byteArrayOf(0x09, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), DeviceNavEncoder.stops(0, 0, 0, 0, ""))
+        val cut = DeviceNavEncoder.stops(2, 4, 0, 0, "é".repeat(30))
+        assertEquals(40, cut[10].toInt())
+        assertEquals(51, cut.size)
+    }
+
     @Test fun destinationAndItsAbsence() {
         val d = ByteBuffer.wrap(DeviceNavEncoder.dest(385449000 to -1217405000)).order(ByteOrder.LITTLE_ENDIAN)
         assertEquals(10, d.capacity())
@@ -97,6 +116,31 @@ class DeviceNavTest {
         assertEquals(5, p.getInt(14))
     }
 
+    @Test fun aLongRouteKeepsFullDetailAheadOfTheRider() {
+        // A 20 m zigzag every 10 m for 15,000 corners (~330 km): far more than fit.
+        val line = List(15_001) { i -> LatLng(38.54 + i * 0.00009, -121.74 + (if (i % 2 == 0) 0.0 else 0.0002)) }
+        val progressM = 40_000.0
+        val out = RouteSimplify.forDevice(line, DeviceNavEncoder.ROUTE_MAX_POINTS, progressM)
+        assertTrue(out.size in 2..DeviceNavEncoder.ROUTE_MAX_POINTS)
+        assertEquals(line.first(), out.first())
+        assertEquals(line.last(), out.last())
+        // every original corner in the next 20 km is still a point of the line
+        val kept = out.toHashSet()
+        var cum = 0.0
+        var checked = 0
+        for (i in 1 until line.size) {
+            cum += line[i - 1].distanceTo(line[i])
+            if (cum > progressM && cum < progressM + RouteSimplify.AHEAD_M - 500) {
+                assertTrue("corner $i ahead dropped", line[i] in kept)
+                checked++
+            }
+        }
+        assertTrue(checked > 50)
+        // and the same route sent from its start keeps its first 20 km instead
+        val fromStart = RouteSimplify.forDevice(line, DeviceNavEncoder.ROUTE_MAX_POINTS, 0.0).toHashSet()
+        assertTrue(line[10] in fromStart && line[11] in fromStart)
+    }
+
     @Test fun aLongLineFitsTheDeviceAndKeepsItsEnds() {
         // A wiggling line north out of Davis: nothing a straight segment could stand in for.
         val line = List(5_000) { i -> LatLng(38.54 + i * 0.0001, -121.74 + (if (i % 2 == 0) 0.0 else 0.02)) }
@@ -117,7 +161,12 @@ class DeviceNavTest {
             assertEquals("end flag", i == chunks.lastIndex, c[1].toInt() and 0x02 != 0)
             points += n
         }
-        assertEquals(thin.size, points)
+        // The chunks carry the device's thinning, which spends its points on the road ahead.
+        val sent = RouteSimplify.forDevice(line, DeviceNavEncoder.ROUTE_MAX_POINTS, 0.0)
+        assertTrue(sent.size in 2..DeviceNavEncoder.ROUTE_MAX_POINTS)
+        assertEquals(line.first(), sent.first())
+        assertEquals(line.last(), sent.last())
+        assertEquals(sent.size, points)
     }
 
     @Test fun trafficIsSentAsFractionsOfTheRoute() {

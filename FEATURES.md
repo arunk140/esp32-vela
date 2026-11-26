@@ -489,3 +489,5 @@ These need a Google sign-in or a Vela server, and Vela has neither.
 - A timeline of where you have been.
 - Live busyness. Popular times shows the typical week.
 - Syncing saved places between devices through an account.
+- The device shows "1/3 waypoints" with the next stop, its distance and time (`NAV_STOPS`, bike-os firmware).
+- A long route keeps full detail (5 m) for the next 20 km on the device and is sent again every 8 km of progress; up to 2048 points (bike-os 0.10+; firmware_ws146 holds 512).

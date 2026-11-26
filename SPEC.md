@@ -1339,7 +1339,11 @@ sampled on Google's line over 700 m from the open route), and a planning fetch o
 
 `nameRoute` names a provisional alternate when it is picked: the via-snap with the same
 refusals, else `LineNamer` over the tiles, else Google's abbreviated steps
-(`GOOGLE_ABBREVIATED`). The route keeps its own Google time figures through naming. A Google
+(`GOOGLE_ABBREVIATED`). A line past the tiles' cap (`RoadNameTiles` `MAX_TILES`, 48 at z14) is
+named at its head (`HeadNaming`): the line up to Google's step nearest `HEAD_M` (20 km), one
+between `MIN_HEAD_M` (5 km) and `MAX_HEAD_M` (30 km), goes through `LineNamer`, and Google's
+steps carry on from that step. `Route.namedToM` holds where the named steps end. With no such
+step, or a head the tiles cannot name, the route keeps its abbreviated steps. The route keeps its own Google time figures through naming. A Google
 reply with no step list at all gets a start covering the trip and an arrival
 (`DirectionsParser.bareSteps`): the nav engine does nothing on a route with no steps.
 
@@ -1543,7 +1547,7 @@ routers are asked at once:
 - Google in its two-wheeler mode (`googleDirections(twoWheeler = true)`, the request in SPEC
   3.4), waited for `MOTORCYCLE_GOOGLE_WAIT_MS` 8 s, `MOTORCYCLE_GOOGLE_URGENT_MS` 3 s on a
   reroute. Its routes win and carry traffic. Each keeps Google's line with its turns named from
-  the map tiles (`twoWheelerNamed`, `LineNamer`), or Google's own steps tagged
+  the map tiles (`twoWheelerNamed`, `LineNamer`; at its head on a long trip, `HeadNaming`), or Google's own steps tagged
   `abbreviatedSteps` when that fails. The open-router snap the driving chain uses is not run: it
   would pull the line back onto a road closed to two-wheelers. A reply line too short to draw is
   dropped, not redrawn by the car router. Where Google has no two-wheeler mode it answers no
@@ -2461,8 +2465,11 @@ with abbreviated steps, no live traffic, or street names that fell short (`Route
   another, except that full steps short of a name still replace abbreviated ones. The names
   gain takes only a candidate that is Google's line (`GOOGLE_HYBRID` or `GOOGLE_LINE_NAMED`): a
   re-check that could not build the hybrid answers with the open router's own route, and the
-  same-course test (five samples) cannot see a short detour. The note in the trip says which
-  was gained.
+  same-course test (five samples) cannot see a short detour. A route named only at its head
+  (`namedToM`) takes a candidate of Google's line with real steps once fewer than
+  `AHEAD_LEFT_M` (10 km) of its named steps are left and the candidate names at least
+  `AHEAD_GAIN_M` (2 km) further (the `ahead` gain): the re-check on the usual cadence names the
+  next stretch before the drive reaches it. The note in the trip says which was gained.
 - Same course, and the current route is not Google's line (`RouteHeal.offGoogleLine`: the open
   router's own route, or an on-device one) while the candidate is (`GOOGLE_HYBRID` or
   `GOOGLE_LINE_NAMED`, real steps, names not short): in a car the candidate replaces it
@@ -5202,7 +5209,10 @@ A version query on `BAKED_URL` moves the map cache off old tiles after a rebake.
   Google and OsmAnd draw them): `TurnArrowGeometry.arrows` takes the route's stretch from
   `BEFORE_M` (30 m) before the maneuver point through the corner to `AFTER_M` (30 m) past it,
   for the maneuvers in `TYPES` (turns, forks, ramps, keeps, a U-turn, a roundabout's exit; not a
-  continue, a merge or the roundabout's entry) from the step in hand onward. The corner is found
+  merge or the roundabout's entry) from the step in hand onward. A continue or a straight (Google's
+  "Continue onto" and name changes parse as straight) gets one
+  only where the line turns `CONTINUE_BEND_DEG` (30) or more within `CONTINUE_SEEK_M` (30 m)
+  past its point, a "Continue onto" whose road takes a corner as its name changes. The corner is found
   on the line, from `CORNER_BACK_M` (10 m) before the point to `SEEK_M` (150 m) past it: the
   first vertex where the chords `HOLD_M` (25 m) long on either side differ by `BEND_DEG` (12)
   or more, moved on to a sharper vertex within `CORNER_NEAR_M` (15 m). A fork's or a ramp's
@@ -7381,6 +7391,7 @@ Messages, all little-endian:
 | NAV ROUTE `0x04` | 4 + 8 per point | flags (start, end), sequence, count, up to 31 points | when the session's `Route` object changes |
 | NAV LIMIT `0x05` | 4 | units (0 km/h, 1 mph), posted limit in those units (0 unknown) | when either changes, and once per connection |
 | NAV TRAFFIC `0x08` | 2 + 5 per stretch | count, then start and end as fractions of the route length (0 to 65,535) and a level 1 to 3; up to 50, the worst and longest first | after each route line |
+| NAV STOPS `0x09` | 11 + up to 40 | next stop (1-based, 0 = none left), stop count (0 clears), 0, meters and seconds to the next stop (rounded to 50 m and 30 s), label length, label (UTF-8) | when it changes (bike-os waypoint face) |
 | NAV PHONE `0x07` | 12 | battery percent (255 unknown), flags (bit 0 charging, bit 1 `Clock24.on`), Unix seconds, minutes east of UTC | on connecting, every 30 s, and when the clock choice changes |
 | NAV ROADS `0x06` | up to 252 | flags (start, end), sequence, an origin in the first chunk, then records of count, class and points as 16-bit offsets in 1e-5 degrees | every 250 m of travel, while the minimal display is on |
 
