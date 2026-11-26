@@ -12,7 +12,8 @@ import kotlin.math.hypot
  * The arrows drawn on the route at its turns while navigating (issue #804): a short stretch of the
  * route from [BEFORE_M] before the maneuver point through the corner to [AFTER_M] past it, with the
  * bearing the stretch ends on for the arrowhead. One arrow per maneuver that bends the course,
- * from the step in hand onward; a continue, a merge or a roundabout's entry gets none.
+ * from the step in hand onward; a merge or a roundabout's entry gets none, and a continue or a straight only
+ * where the line takes a corner at it ([CONTINUE_BEND_DEG]).
  *
  * The corner is found on the line rather than taken from the maneuver point: a fork's or a
  * ramp's split sits past the point the route puts the maneuver at, and an arrow cut at a fixed
@@ -67,6 +68,12 @@ object TurnArrowGeometry {
         ManeuverType.KEEP_LEFT, ManeuverType.KEEP_RIGHT,
     )
 
+    /** A continue or a straight gets an arrow only when the line turns at least [CONTINUE_BEND_DEG] within
+     *  [CONTINUE_SEEK_M] past its point: a "Continue onto" where the road takes a corner as its
+     *  name changes. A continue along a straight road gets none. */
+    const val CONTINUE_SEEK_M = 30.0
+    const val CONTINUE_BEND_DEG = 30.0
+
     /** The arrows for [route] from [fromStep] on, cut from [line], the line the map draws for it. */
     fun arrows(route: Route, fromStep: Int, line: List<LatLng> = route.polyline): List<Arrow> {
         val poly = line
@@ -80,15 +87,18 @@ object TurnArrowGeometry {
         val maneuvers = route.maneuvers
         for (i in maxOf(fromStep, 0) until maneuvers.size) {
             val m = maneuvers[i]
-            if (m.type !in TYPES) continue
-            val at = if (guide === poly) RouteProjection.alongMeters(poly, cum, m.location, MATCH_M) ?: continue else {
+            // Google's "Continue onto" and name changes are parsed as STRAIGHT.
+            val isContinue = m.type == ManeuverType.CONTINUE || m.type == ManeuverType.STRAIGHT
+            if (m.type !in TYPES && !isContinue) continue
+            val at =if (guide === poly) RouteProjection.alongMeters(poly, cum, m.location, MATCH_M) ?: continue else {
                 val g = RouteProjection.alongMeters(guide, guideCum, m.location, MATCH_M) ?: continue
                 val (a, off) = NavEngine.projectAlong(poly, cum, m.location, g * scale - DRAWN_WINDOW_M, g * scale + DRAWN_WINDOW_M)
                 if (off > MATCH_M) continue
                 a
             }
             val s0 = maxOf(0.0, at - BEFORE_M)
-            val corner = cornerIndex(poly, cum, at)
+            val corner = cornerIndex(poly, cum, at, if (isContinue) CONTINUE_SEEK_M else SEEK_M)
+            if (isContinue && (corner < 0 || hinge(poly, cum, corner) < CONTINUE_BEND_DEG)) continue
             val cornerM = if (corner >= 0) cum[corner] else at
             val s1 = minOf(total, cornerM + AFTER_M)
             if (s1 - s0 < MIN_LENGTH_M) continue
@@ -102,13 +112,13 @@ object TurnArrowGeometry {
         return out
     }
 
-    /** The vertex the course turns at, from [CORNER_BACK_M] before [at] to [SEEK_M] past it: the
+    /** The vertex the course turns at, from [CORNER_BACK_M] before [at] to [seekM] past it: the
      *  first whose hinge ([hinge]) reaches [BEND_DEG], moved on to a sharper vertex within
      *  [CORNER_NEAR_M] of it. -1 when the line does not turn there. */
-    private fun cornerIndex(poly: List<LatLng>, cum: DoubleArray, at: Double): Int {
+    private fun cornerIndex(poly: List<LatLng>, cum: DoubleArray, at: Double, seekM: Double): Int {
         var k = RouteProjection.segmentEnd(cum, maxOf(0.0, at - CORNER_BACK_M))
         if (cum[k] < at - CORNER_BACK_M) k++
-        val end = at + SEEK_M
+        val end = at + seekM
         while (k < poly.size - 1 && cum[k] <= end) {
             var best = hinge(poly, cum, k)
             if (best >= BEND_DEG) {

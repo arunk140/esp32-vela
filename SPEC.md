@@ -5202,7 +5202,10 @@ A version query on `BAKED_URL` moves the map cache off old tiles after a rebake.
   Google and OsmAnd draw them): `TurnArrowGeometry.arrows` takes the route's stretch from
   `BEFORE_M` (30 m) before the maneuver point through the corner to `AFTER_M` (30 m) past it,
   for the maneuvers in `TYPES` (turns, forks, ramps, keeps, a U-turn, a roundabout's exit; not a
-  continue, a merge or the roundabout's entry) from the step in hand onward. The corner is found
+  merge or the roundabout's entry) from the step in hand onward. A continue or a straight (Google's
+  "Continue onto" and name changes parse as straight) gets one
+  only where the line turns `CONTINUE_BEND_DEG` (30) or more within `CONTINUE_SEEK_M` (30 m)
+  past its point, a "Continue onto" whose road takes a corner as its name changes. The corner is found
   on the line, from `CORNER_BACK_M` (10 m) before the point to `SEEK_M` (150 m) past it: the
   first vertex where the chords `HOLD_M` (25 m) long on either side differ by `BEND_DEG` (12)
   or more, moved on to a sharper vertex within `CORNER_NEAR_M` (15 m). A fork's or a ramp's
