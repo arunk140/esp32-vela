@@ -1339,7 +1339,11 @@ sampled on Google's line over 700 m from the open route), and a planning fetch o
 
 `nameRoute` names a provisional alternate when it is picked: the via-snap with the same
 refusals, else `LineNamer` over the tiles, else Google's abbreviated steps
-(`GOOGLE_ABBREVIATED`). The route keeps its own Google time figures through naming. A Google
+(`GOOGLE_ABBREVIATED`). A line past the tiles' cap (`RoadNameTiles` `MAX_TILES`, 48 at z14) is
+named at its head (`HeadNaming`): the line up to Google's step nearest `HEAD_M` (20 km), one
+between `MIN_HEAD_M` (5 km) and `MAX_HEAD_M` (30 km), goes through `LineNamer`, and Google's
+steps carry on from that step. `Route.namedToM` holds where the named steps end. With no such
+step, or a head the tiles cannot name, the route keeps its abbreviated steps. The route keeps its own Google time figures through naming. A Google
 reply with no step list at all gets a start covering the trip and an arrival
 (`DirectionsParser.bareSteps`): the nav engine does nothing on a route with no steps.
 
@@ -1543,7 +1547,7 @@ routers are asked at once:
 - Google in its two-wheeler mode (`googleDirections(twoWheeler = true)`, the request in SPEC
   3.4), waited for `MOTORCYCLE_GOOGLE_WAIT_MS` 8 s, `MOTORCYCLE_GOOGLE_URGENT_MS` 3 s on a
   reroute. Its routes win and carry traffic. Each keeps Google's line with its turns named from
-  the map tiles (`twoWheelerNamed`, `LineNamer`), or Google's own steps tagged
+  the map tiles (`twoWheelerNamed`, `LineNamer`; at its head on a long trip, `HeadNaming`), or Google's own steps tagged
   `abbreviatedSteps` when that fails. The open-router snap the driving chain uses is not run: it
   would pull the line back onto a road closed to two-wheelers. A reply line too short to draw is
   dropped, not redrawn by the car router. Where Google has no two-wheeler mode it answers no
@@ -2461,8 +2465,11 @@ with abbreviated steps, no live traffic, or street names that fell short (`Route
   another, except that full steps short of a name still replace abbreviated ones. The names
   gain takes only a candidate that is Google's line (`GOOGLE_HYBRID` or `GOOGLE_LINE_NAMED`): a
   re-check that could not build the hybrid answers with the open router's own route, and the
-  same-course test (five samples) cannot see a short detour. The note in the trip says which
-  was gained.
+  same-course test (five samples) cannot see a short detour. A route named only at its head
+  (`namedToM`) takes a candidate of Google's line with real steps once fewer than
+  `AHEAD_LEFT_M` (10 km) of its named steps are left and the candidate names at least
+  `AHEAD_GAIN_M` (2 km) further (the `ahead` gain): the re-check on the usual cadence names the
+  next stretch before the drive reaches it. The note in the trip says which was gained.
 - Same course, and the current route is not Google's line (`RouteHeal.offGoogleLine`: the open
   router's own route, or an on-device one) while the candidate is (`GOOGLE_HYBRID` or
   `GOOGLE_LINE_NAMED`, real steps, names not short): in a car the candidate replaces it

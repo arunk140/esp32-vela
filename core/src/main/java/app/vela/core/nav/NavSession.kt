@@ -1282,7 +1282,8 @@ class NavSession @Inject constructor(
                     !app.vela.core.data.RouteGeometry.startsBehind(candidate.polyline, h) &&
                     !app.vela.core.data.RouteGeometry.goesBack(candidate.polyline, trackTo(car, h))
             }
-            val gains = if (sameCourse && candidate.drivable) RouteHeal.gains(current, candidate, lineOk) else null
+            val progressM = (current.distanceMeters - _state.value.remainingDistance).coerceAtLeast(0.0)
+            val gains = if (sameCourse && candidate.drivable) RouteHeal.gains(current, candidate, lineOk, progressM) else null
             if (gains != null) {
                 lastSwapReason = "heal"
                 adoptRecheck(candidate, candidateEta, remainingStops)

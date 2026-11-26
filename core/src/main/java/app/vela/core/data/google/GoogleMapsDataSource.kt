@@ -1916,10 +1916,20 @@ class GoogleMapsDataSource @Inject constructor(
      *  drive chain names a line it could not snap. Google's own abbreviated steps when that fails,
      *  tagged so a drive's recheck upgrades them. */
     private suspend fun twoWheelerNamed(route: Route): Route =
-        kotlinx.coroutines.withTimeoutOrNull(WALK_NAME_WAIT_MS) {
-            app.vela.core.data.naming.RoadNameTiles.linesAlong(route.polyline)
-                ?.let { app.vela.core.data.naming.LineNamer.name(route, it, TravelMode.DRIVE) }
-        } ?: route.copy(provisional = false, abbreviatedSteps = true, source = RouteSource.GOOGLE_ABBREVIATED)
+        kotlinx.coroutines.withTimeoutOrNull(WALK_NAME_WAIT_MS) { tileNamed(route, TravelMode.DRIVE) }
+            ?: route.copy(provisional = false, abbreviatedSteps = true, source = RouteSource.GOOGLE_ABBREVIATED)
+
+    /** [route]'s turns named from the map tiles ([LineNamer]): the whole line, or on a line past
+     *  the tiles' cap its first stretch, Google's steps after it ([HeadNaming]). Null when neither. */
+    private suspend fun tileNamed(route: Route, mode: TravelMode): Route? {
+        app.vela.core.data.naming.RoadNameTiles.linesAlong(route.polyline)
+            ?.let { lines -> app.vela.core.data.naming.LineNamer.name(route, lines, mode) }
+            ?.let { return it }
+        return app.vela.core.data.naming.HeadNaming.name(route) { head ->
+            app.vela.core.data.naming.RoadNameTiles.linesAlong(head.polyline)
+                ?.let { lines -> app.vela.core.data.naming.LineNamer.name(head, lines, mode) }
+        }
+    }
 
     /** True when [RouteGeometry.spurAt] finds a spur on [route] AND one of the route's own
      *  maneuvers within [SPUR_TURN_NEAR_M] of it is a turn or U-turn. */
@@ -2171,10 +2181,7 @@ class GoogleMapsDataSource @Inject constructor(
         // The snap failed or was refused: keep Google's line and name its turns from the map tiles
         // (LineNamer). Only when that fails too does nav run on Google's abbreviated steps, tagged so
         // the in-drive recheck can silently upgrade to full steps once the open router answers.
-        else kotlinx.coroutines.withTimeoutOrNull(WALK_NAME_WAIT_MS) {
-            app.vela.core.data.naming.RoadNameTiles.linesAlong(route.polyline)
-                ?.let { app.vela.core.data.naming.LineNamer.name(route, it, mode) }
-        } ?: route.copy(provisional = false, abbreviatedSteps = true, source = RouteSource.GOOGLE_ABBREVIATED)
+        else kotlinx.coroutines.withTimeoutOrNull(WALK_NAME_WAIT_MS) { tileNamed(route, mode) } ?: route.copy(provisional = false, abbreviatedSteps = true, source = RouteSource.GOOGLE_ABBREVIATED)
     }
 
     /** [googleDirections] with the same transient-blip retry the OSRM path has (routeOsrm goes

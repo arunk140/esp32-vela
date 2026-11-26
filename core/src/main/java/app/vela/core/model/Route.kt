@@ -307,6 +307,11 @@ data class Route(
      *  by `DirectionsParser`). A turn the map tiles leave unnamed takes the street of the one at
      *  its corner (`LineNamer`). Empty for every other router. */
     val stepNames: List<StepName> = emptyList(),
+    /** Meters along [polyline] that the named steps reach, when only the head of a long route was
+     *  named (`HeadNaming`): Google's abbreviated steps carry on past it. Null when the steps
+     *  cover the whole route. A re-check names the next stretch before the drive reaches it
+     *  ([app.vela.core.nav.RouteHeal.gains], "ahead"). */
+    val namedToM: Double? = null,
 ) {
     val hasLiveTraffic: Boolean get() = durationInTrafficSeconds != null
 
