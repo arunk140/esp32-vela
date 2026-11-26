@@ -75,6 +75,8 @@ class DeviceService : Service() {
     /** The route whose line the device holds; compared by identity, as the session swaps it. */
     private var sentRoute: Route? = null
     private var routeSent = false
+    /** Progress along [sentRoute] when it was last sent (a long route is sent again as you go). */
+    private var sentProgressM = 0.0
     private var cumFor: Route? = null
     private var cum = DoubleArray(0)
     /** The last course worth showing, held while stopped so the device map does not spin. */
@@ -384,20 +386,38 @@ class DeviceService : Service() {
     private fun pushNav(s: NavSession.State) {
         val frame = DeviceNavFrame.of(s)
         encoder.send(frame)
+        // bike-os waypoint face: "1/3 waypoints" and the figures to the next stop.
+        val total = if (frame == DeviceNavFrame.IDLE) 0 else navSession.visibleStopCount()
+        val ahead = if (total == 0) 0 else navSession.remainingStops().size
+        val next = s.nextStop
+        encoder.sendStops(
+            next = if (ahead > 0) total - ahead + 1 else 0,
+            count = total,
+            distanceM = next?.distanceM ?: 0.0,
+            seconds = next?.seconds ?: 0.0,
+            label = next?.label ?: "",
+        )
         val imperial = app.vela.ui.Units.imperial.value
         val kmh = DeviceBridge.speedLimitKmh.value
         encoder.sendLimit(imperial, if (kmh == null) 0 else (if (imperial) kmh / 1.609344 else kmh).roundToInt())
         // The line goes with the frame: an idle frame (no drive, or a paused one) makes the
         // device clear its line, so the line is sent again when the drive is back.
         val route = s.route?.takeIf { frame != DeviceNavFrame.IDLE }
-        if (routeSent && route === sentRoute) return
+        val progressM = route?.let { (it.distanceMeters - s.remainingDistance).coerceAtLeast(0.0) } ?: 0.0
+        // bike-os: a route too long to send whole at full detail goes again every
+        // RouteSimplify.RESEND_M, so the detailed stretch stays ahead of the rider.
+        val long = route != null && route.polyline.size > DeviceNavEncoder.ROUTE_MAX_POINTS
+        if (routeSent && route === sentRoute &&
+            (!long || kotlin.math.abs(progressM - sentProgressM) < RouteSimplify.RESEND_M)
+        ) return
         routeSent = true
         sentRoute = route
+        sentProgressM = progressM
         routeJob?.cancel()
         routeJob = scope.launch {
             // Thinning a long line is real work; the writes belong on the main thread.
             val chunks = withContext(Dispatchers.Default) {
-                DeviceNavEncoder.routeChunks(route?.polyline ?: emptyList())
+                DeviceNavEncoder.routeChunks(route?.polyline ?: emptyList(), progressM)
             }
             // The congestion goes after the line it belongs to: the device drops the old
             // stretches when a new line starts. A traffic recheck swaps the route object, so
