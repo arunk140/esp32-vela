@@ -76,6 +76,7 @@ object RouteRejoin {
             roadNamesLatin = old.roadNamesLatin + head.roadNamesLatin,
             exitSigns = head.exitSigns + old.exitSigns,
             stepNames = head.stepNames + old.stepNames,
+            roadKindSteps = head.roadKindSteps + old.roadKindSteps,
             made = "$MADE${headSteps.size - 1}",
         )
     }

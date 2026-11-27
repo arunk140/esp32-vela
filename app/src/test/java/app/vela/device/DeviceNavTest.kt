@@ -301,6 +301,14 @@ class DeviceNavTest {
         val bare = route(Maneuver(ManeuverType.FORK_LEFT, " Keep left at the fork ", davis, 300.0, 20.0), step(ManeuverType.ARRIVE, null, 0.0))
         assertEquals("Keep left at the fork", DeviceNavFrame.of(driving.copy(route = bare, nav = NavState(stepIndex = 0))).street)
         assertEquals("", DeviceNavFrame.of(driving.copy(route = bare, nav = NavState(stepIndex = 1))).street)
+        // An instruction that names a flyover or a tunnel wins over the road, for the device's badge.
+        val fly = route(
+            Maneuver(ManeuverType.FORK_LEFT, "Keep left to take the flyover", davis, 300.0, 20.0, road = "Covell Blvd"),
+            Maneuver(ManeuverType.STRAIGHT, "Continue onto Covell Blvd Overpass", davis, 300.0, 20.0, road = "Covell Blvd Overpass"),
+            step(ManeuverType.ARRIVE, null, 0.0),
+        )
+        assertEquals("Keep left to take the flyover", DeviceNavFrame.of(driving.copy(route = fly, nav = NavState(stepIndex = 0))).street)
+        assertEquals("Covell Blvd Overpass", DeviceNavFrame.of(driving.copy(route = fly, nav = NavState(stepIndex = 1))).street)
         assertEquals(DeviceManeuver.OFF_ROUTE, DeviceNavFrame.of(driving.copy(nav = NavState(stepIndex = 1, offRoute = true))).maneuver)
 
         // The device clears its line on any inactive frame, so a paused drive is no drive.

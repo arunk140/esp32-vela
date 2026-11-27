@@ -405,11 +405,20 @@ them one at a time.
 | `summaryText` | `summary[1]` | |
 | `spans` | `route[3][5][0]` | `[level, startMeters, lengthMeters]`, congested stretches only |
 
-Steps are `<step maneuver='..' meters='..'>` markup strings anywhere under the route node. The
-turn side and severity are in the child `<turn side='..' type='..'>`. A leading "Use the ...
-lanes to" clause becomes `Maneuver.laneHint`.
+The step list is read from every step's structured parts (`DirectionsParser.fullSteps`): the
+words from `[14]`, the point from `[7][2]`, and the turn from the `dir-tt-...` icon in the array
+the step heads (`iconType`; "Keep left" and "Keep right" are drawn as turns and kept as keeps).
+Each step sits where its point lies on Google's line, within `FULL_STEP_OFF_M` (60 m), and runs
+to the next. The `<step>` markup is on only some steps, and the ones it leaves out include
+"Keep right to take the flyover" and a slight left between two turns. When the structured steps
+are fewer than the markup's, or a point is off the line or out of order, the markup list is used.
+With `VelaSteps` at DEBUG every step's words and icon are logged.
 
-`placeManeuvers` puts each maneuver on the polyline at the fraction given by the summed
+Markup steps are `<step maneuver='..' meters='..'>` strings anywhere under the route node. The
+turn side and severity are in the child `<turn side='..' type='..'>`. A leading "Use the ...
+lanes to" clause becomes `Maneuver.laneHint` (on structured steps too).
+
+For markup steps, `placeManeuvers` puts each maneuver on the polyline at the fraction given by the summed
 distance of the steps before it over the sum of all step distances, and pins the last one
 (ARRIVE) to the route end. Step distances fall short of the geometry, and an unpinned arrive
 lands early and fires the arrival trigger there.
@@ -1350,7 +1359,14 @@ Google step beside it would be said twice. The named step before a cut runs on t
 step, however far. A Google step that turns (any type but straight, continue, depart and
 arrive) with no named step within `KEEP_NEAR_M` (150 m) is kept in the stretch at its place
 (`withGoogleTurns`): the tiles can miss a junction, and a turn Google says is there is not
-dropped. A stretch whose tiles were read but that `LineNamer` could not name (too few named
+dropped. Google decides what kind of step a corner is: a tiles' U-turn (165 degrees or more)
+that Google does not call one takes Google's step within `KEEP_NEAR_M`, or with none there is a
+bend of the road and folds into the step before it. A Google step whose words name a flyover,
+overpass, elevated road, overbridge, tunnel, underpass or service road
+(`HeadNaming.mentionsRoadKind`) gives those words to the tiles' step beside it, or is put in, of
+any type. A line `LineNamer` names whole gets the same (`HeadNaming.keepGoogleTurns`), so a short
+trip does not lose a turn the tiles missed and say one long step over it. With `VelaSteps` at
+DEBUG both step lists are logged. A stretch whose tiles were read but that `LineNamer` could not name (too few named
 roads) stays on Google's steps and the naming moves on past it (`skipNext`); tiles that could
 not be read are tried again. During the drive `NavSession.maybeNameAhead` names the next stretch
 (`MapDataSource.nameAhead`, `HeadNaming.nameNext`, `NAME_AHEAD_WAIT_MS` 30 s) on every fix with
@@ -7401,7 +7417,7 @@ Messages, all little-endian:
 | --- | --- | --- | --- |
 | POSITION | 18 | lat and lon in 1e-7 degrees, speed cm/s, course 0.01 degrees, satellites (0), fix, phone clock ms | each fix, about 1 Hz |
 | NAV STATE `0x01` | 12 | flags (bit 0 active, bit 2 remaining distance in units of 10 m, bit 3 turn only: no route line, which bike-os shows as a full-screen turn card), maneuver, meters to it, the maneuver after, meters between the two, remaining distance, remaining seconds | on each session change and every 1 s |
-| NAV TEXT `0x02` | 2 + up to 48 | length, then UTF-8: the road being entered, else its number, else the destination for the last step, else the step's instruction | when it changes |
+| NAV TEXT `0x02` | 2 + up to 48 | length, then UTF-8: the step's instruction when it says flyover, overpass, elevated, overbridge, tunnel, underpass or service road and the road name does not (the device reads these words for its road badge), else the road being entered, else its number, else the destination for the last step, else the step's instruction | when it changes |
 | NAV DEST `0x03` | 10 | present, lat, lon | when it changes |
 | NAV ROUTE `0x04` | 4 + 8 per point | flags (start, end), sequence, count, up to 31 points | when the session's `Route` object changes |
 | NAV LIMIT `0x05` | 4 | units (0 km/h, 1 mph), posted limit in those units (0 unknown) | when either changes, and once per connection |
@@ -7461,7 +7477,9 @@ is more than 5 minutes past). `DeviceService.pushNav` sends it in place of the i
 no route line, no stops and no destination: Google Maps publishes none. The removed
 notification clears it. Nothing is logged or kept. With either switch on, `DeviceService`
 asks Android to bind the listener again (`DeviceMediaListener.rebindIfNeeded`,
-`requestRebind`) whenever the link's bridges are synced and the listener is not connected.
+`requestRebind`) whenever the link's bridges are synced and the listener is not connected. MIUI
+ignores that request: when the listener is still not connected 3 s later (`REBIND_CHECK_MS`), its
+component is turned off and on, which makes the system bind it.
 
 Nearby streets (`DeviceRoads`) give the minimal display something around its route line. They
 are the named roads of classes motorway to minor from the map's own z14 vector tiles

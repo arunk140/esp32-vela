@@ -112,6 +112,62 @@ class HeadNamingTest {
         assertEquals(100_000.0, named.maneuvers.sumOf { it.distanceMeters }, 10.0)
     }
 
+    @Test fun aRouteNamedWholeKeepsTheGoogleTurnsTheTilesMissed() {
+        // The tiles name the whole line with one turn at 700 m: Google's keep right at 2 km and
+        // turn left at 60 km come back, its straight step does not.
+        val named = HeadNaming.keepGoogleTurns(route, tiles(route, Triple(700.0, ManeuverType.TURN_RIGHT, "Turn right onto B Street")))
+        assertEquals(listOf("Head north", "Turn right onto B Street", "Keep right", "Turn left", ""), named.maneuvers.map { it.instruction })
+        assertEquals(100_000.0, named.maneuvers.sumOf { it.distanceMeters }, 10.0)
+        // Tiles that found every turn are left as they are.
+        val full = tiles(route, Triple(2_000.0, ManeuverType.KEEP_RIGHT, "Keep right onto I-80"), Triple(60_000.0, ManeuverType.TURN_LEFT, "Turn left onto Main St"))
+        assertEquals(full, HeadNaming.keepGoogleTurns(route, full))
+    }
+
+    @Test fun aTilesUturnGoogleDoesNotHaveTakesGooglesStepOrIsDropped() {
+        // The tiles read a U-turn at 2 km where Google keeps right: Google's step wins.
+        val near = HeadNaming.keepGoogleTurns(route, tiles(route, Triple(1_980.0, ManeuverType.UTURN, "Make a U-turn onto B Street")))
+        assertEquals(ManeuverType.KEEP_RIGHT, near.maneuvers[1].type)
+        assertEquals("Keep right", near.maneuvers[1].instruction)
+        assertTrue(near.maneuvers.none { it.type == ManeuverType.UTURN })
+        // A U-turn at 10 km with no Google step near is a bend of the road: folded away, its
+        // road kept as a rename.
+        val bend = HeadNaming.keepGoogleTurns(route, tiles(route, Triple(10_000.0, ManeuverType.UTURN, "Make a U-turn onto C Street")))
+        assertTrue(bend.maneuvers.none { it.type == ManeuverType.UTURN })
+        assertEquals(100_000.0, bend.maneuvers.sumOf { it.distanceMeters }, 10.0)
+        // Google's own U-turn stays.
+        val g = route.copy(legs = listOf(route.legs.single().copy(maneuvers = google.toMutableList().also {
+            it[3] = step(ManeuverType.UTURN, 60_000.0, 100_000.0, "Make a U-turn")
+        })))
+        val real = HeadNaming.keepGoogleTurns(g, tiles(g, Triple(60_020.0, ManeuverType.UTURN, "Make a U-turn onto D Street")))
+        assertEquals("Make a U-turn onto D Street", real.maneuvers.single { it.type == ManeuverType.UTURN }.instruction)
+    }
+
+    @Test fun googlesFlyoverWordsReachTheNamedSteps() {
+        val fly = route.copy(legs = listOf(route.legs.single().copy(maneuvers = google.toMutableList().also {
+            it[2] = step(ManeuverType.STRAIGHT, 18_000.0, 60_000.0, "Continue straight to take the flyover")
+        })))
+        // A tiles' step beside it takes its words; with none there it is put in, though straight.
+        val near = HeadNaming.keepGoogleTurns(fly, tiles(fly, Triple(2_000.0, ManeuverType.KEEP_RIGHT, "Keep right onto I-80"), Triple(18_050.0, ManeuverType.SLIGHT_LEFT, "Slight left onto Main St")))
+        assertEquals("Continue straight to take the flyover", near.maneuvers[2].instruction)
+        assertEquals(ManeuverType.SLIGHT_LEFT, near.maneuvers[2].type)
+        val alone = HeadNaming.keepGoogleTurns(fly, tiles(fly, Triple(2_000.0, ManeuverType.KEEP_RIGHT, "Keep right onto I-80")))
+        assertTrue(alone.maneuvers.any { it.instruction == "Continue straight to take the flyover" })
+        assertEquals(100_000.0, alone.maneuvers.sumOf { it.distanceMeters }, 10.0)
+    }
+
+    @Test fun aNestedFlyoverStepIsPutInWhereNoStepSaysIt() {
+        // Google's step list says nothing at 30 km; a step nested under the highway one takes a
+        // flyover there. A second one beside Google's keep right adds nothing new.
+        val fly = route.copy(roadKindSteps = listOf(
+            app.vela.core.model.RoadKindStep(at(30_000.0), "Take the flyover"),
+        ))
+        val named = HeadNaming.keepGoogleTurns(fly, tiles(fly, Triple(2_000.0, ManeuverType.KEEP_RIGHT, "Keep right onto I-80"), Triple(60_000.0, ManeuverType.TURN_LEFT, "Turn left onto Main St")))
+        val f = named.maneuvers.single { it.instruction == "Take the flyover" }
+        assertEquals(ManeuverType.STRAIGHT, f.type)
+        assertEquals(30_000.0, named.maneuvers.takeWhile { it !== f }.sumOf { it.distanceMeters }, 10.0)
+        assertEquals(100_000.0, named.maneuvers.sumOf { it.distanceMeters }, 10.0)
+    }
+
     @Test fun aStretchTheMapLeavesUnnamedIsSkippedAndTheRestIsStillNamed() = runBlocking {
         val first = HeadNaming.name(route) { s -> tiles(s) }!!
         val skipped = HeadNaming.skipNext(first)!!

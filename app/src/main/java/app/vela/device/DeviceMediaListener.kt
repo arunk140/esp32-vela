@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.app.Person
 import android.content.ComponentName
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
@@ -127,11 +128,28 @@ class DeviceMediaListener : NotificationListenerService() {
          * Asks Android to bind the listener again when it has access but is not bound. An update of
          * the app unbinds it, and some systems (MIUI among them) do not bind it again by themselves:
          * the media and Google Maps' turns then stopped reaching the device until access was toggled.
+         * MIUI ignores the rebind request too, so when the listener is still not bound
+         * [REBIND_CHECK_MS] later, the listener component is turned off and on, which makes the
+         * system bind it.
          */
         fun rebindIfNeeded(ctx: Context) {
             if (connected || !hasAccess(ctx)) return
-            runCatching { NotificationListenerService.requestRebind(component(ctx)) }
+            val app = ctx.applicationContext
+            runCatching { NotificationListenerService.requestRebind(component(app)) }
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                if (connected || !hasAccess(app)) return@postDelayed
+                runCatching {
+                    val pm = app.packageManager
+                    val c = component(app)
+                    pm.setComponentEnabledSetting(c, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+                    pm.setComponentEnabledSetting(c, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
+                    NotificationListenerService.requestRebind(c)
+                    Log.i("VelaDevice", "listener not bound after a rebind request: component toggled")
+                }
+            }, REBIND_CHECK_MS)
         }
+
+        private const val REBIND_CHECK_MS = 3_000L
 
         fun hasAccess(ctx: Context): Boolean =
             NotificationManagerCompat.getEnabledListenerPackages(ctx).contains(ctx.packageName)
