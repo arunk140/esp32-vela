@@ -73,7 +73,9 @@ speed and heading about once a second, and during a drive the next turn, the roa
 route line and the destination. It also receives the phone's battery level and the time. With "What is playing" on it also
 receives the track, artist and cover. With "Incoming calls" on it receives the caller's name and number while the phone rings. For
 calls in apps such as WhatsApp, Vela reads the app's call notification to get the caller's
-name; it reads no other notification.
+name. With "Follow Google Maps" on, it reads Google Maps' navigation notification (the next turn,
+its distance, the road, the arrival time) and sends it to the device; nothing from it is kept or
+sent anywhere else. It reads no other notification.
 Reading the pairing QR uses the camera and Google's ML Kit barcode decoder, which runs on the
 phone and sends nothing.
 

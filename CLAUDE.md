@@ -316,6 +316,10 @@ signed file the app fetches at launch (SPEC 11).
   language once `AppLocale.wrap` has run.
 - The 12 or 24 hour clock is a device setting, not the locale. Use `Clock24` / `ClockFormat`.
 - `InputStream.readNBytes` is API 33. minSdk is 26.
+- An app update can leave the notification listener unbound with its access still granted
+  (MIUI does not bind it again), and the media and Google Maps' turns stop reaching the nav
+  device. `DeviceMediaListener.rebindIfNeeded` asks for the bind; `dumpsys notification` lists
+  the live listeners.
 - An early `return@forEachIndexed` inside a composable lambda can crash the Compose compiler.
 - `withTimeoutOrNull` only interrupts at a suspension point. A blocking socket read or the
   offline router's native compute outlives it. Run those on an unstructured scope so the

@@ -26,6 +26,9 @@ object DeviceLinkPrefs {
     val media = mutableStateOf(false)
     /** Show a ringing call on the device and take its answer and reject buttons. */
     val calls = mutableStateOf(false)
+    /** With Vela not navigating, show Google Maps' turns on the device (GoogleMapsNav). Needs
+     *  notification access. */
+    val followMaps = mutableStateOf(false)
 
     fun init(context: Context) {
         val p = prefs(context)
@@ -37,6 +40,7 @@ object DeviceLinkPrefs {
         minimal.value = p.getBoolean(KEY_MINIMAL, false)
         media.value = p.getBoolean(KEY_MEDIA, false)
         calls.value = p.getBoolean(KEY_CALLS, false)
+        followMaps.value = p.getBoolean(KEY_FOLLOW_MAPS, false)
     }
 
     fun saveBond(context: Context, b: Bond) {
@@ -79,6 +83,12 @@ object DeviceLinkPrefs {
         prefs(context).edit().putBoolean(KEY_CALLS, on).apply()
     }
 
+    fun setFollowMaps(context: Context, on: Boolean) {
+        followMaps.value = on
+        prefs(context).edit().putBoolean(KEY_FOLLOW_MAPS, on).apply()
+        if (!on) GoogleMapsNav.onRemoved()
+    }
+
     private fun prefs(c: Context) = c.getSharedPreferences("vela_device", Context.MODE_PRIVATE)
     private const val KEY_MAC = "mac"
     private const val KEY_NAME = "name"
@@ -89,4 +99,5 @@ object DeviceLinkPrefs {
     private const val KEY_MINIMAL = "minimal"
     private const val KEY_MEDIA = "media"
     private const val KEY_CALLS = "calls"
+    private const val KEY_FOLLOW_MAPS = "follow_maps"
 }

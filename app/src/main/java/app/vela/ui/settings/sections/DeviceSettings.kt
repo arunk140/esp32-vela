@@ -179,6 +179,24 @@ internal fun DeviceSettingsScreen(onBack: () -> Unit) {
                 )
                 GroupDivider()
                 ToggleRow(
+                    label = stringResource(R.string.device_follow_maps),
+                    checked = DeviceLinkPrefs.followMaps.value,
+                    onCheckedChange = { on ->
+                        DeviceLinkPrefs.setFollowMaps(context, on)
+                        DeviceService.refresh(context)
+                        // Google Maps' notification is read with the same access as the media.
+                        if (on && !DeviceMediaListener.hasAccess(context)) {
+                            runCatching {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                                )
+                            }
+                        }
+                    },
+                    hint = stringResource(R.string.device_follow_maps_hint),
+                )
+                GroupDivider()
+                ToggleRow(
                     label = stringResource(R.string.device_calls),
                     checked = DeviceLinkPrefs.calls.value,
                     onCheckedChange = { on ->
