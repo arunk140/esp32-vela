@@ -1340,10 +1340,25 @@ sampled on Google's line over 700 m from the open route), and a planning fetch o
 `nameRoute` names a provisional alternate when it is picked: the via-snap with the same
 refusals, else `LineNamer` over the tiles, else Google's abbreviated steps
 (`GOOGLE_ABBREVIATED`). A line past the tiles' cap (`RoadNameTiles` `MAX_TILES`, 48 at z14) is
-named at its head (`HeadNaming`): the line up to Google's step nearest `HEAD_M` (20 km), one
-between `MIN_HEAD_M` (5 km) and `MAX_HEAD_M` (30 km), goes through `LineNamer`, and Google's
-steps carry on from that step. `Route.namedToM` holds where the named steps end. With no such
-step, or a head the tiles cannot name, the route keeps its abbreviated steps. The route keeps its own Google time figures through naming. A Google
+named a stretch at a time (`HeadNaming`): its first `STRETCH_M` (20 km) go through `LineNamer`,
+and Google's steps carry on past the cut. `Route.namedToM` holds where the named steps end; a
+head the tiles cannot name keeps the abbreviated steps. A cut is looked for from its target to
+`CUT_SEEK_M` (3 km) on, every `CUT_STEP_M` (100 m), where the chords `CUT_CHORD_M` (150 m) either
+side differ by under `CUT_STRAIGHT_DEG` (8) and no Google step lies within `CUT_CLEAR_M` (300 m):
+the tiles read a turn across a window either side, so a junction at a cut would go unsaid and a
+Google step beside it would be said twice. The named step before a cut runs on to Google's next
+step, however far. A Google step that turns (any type but straight, continue, depart and
+arrive) with no named step within `KEEP_NEAR_M` (150 m) is kept in the stretch at its place
+(`withGoogleTurns`): the tiles can miss a junction, and a turn Google says is there is not
+dropped. A stretch whose tiles were read but that `LineNamer` could not name (too few named
+roads) stays on Google's steps and the naming moves on past it (`skipNext`); tiles that could
+not be read are tried again. During the drive `NavSession.maybeNameAhead` names the next stretch
+(`MapDataSource.nameAhead`, `HeadNaming.nameNext`, `NAME_AHEAD_WAIT_MS` 30 s) on every fix with
+none in flight, and within `LAST_M` (30 km) of the destination the stretch runs to it, until
+the route is named whole. Each stretch replaces only steps past the one the drive is heading
+for, so the swap keeps the drive's state; a swap the drive has passed, or a stretch that could
+not be named, waits `NAME_AHEAD_RETRY_MS` (60 s). A demo drive names ahead too (`nameAheadInReplay`); a replay of a
+recorded trip does not. The route keeps its own Google time figures through naming. A Google
 reply with no step list at all gets a start covering the trip and an arrival
 (`DirectionsParser.bareSteps`): the nav engine does nothing on a route with no steps.
 
@@ -2469,7 +2484,7 @@ with abbreviated steps, no live traffic, or street names that fell short (`Route
   (`namedToM`) takes a candidate of Google's line with real steps once fewer than
   `AHEAD_LEFT_M` (10 km) of its named steps are left and the candidate names at least
   `AHEAD_GAIN_M` (2 km) further (the `ahead` gain): the re-check on the usual cadence names the
-  next stretch before the drive reaches it. The note in the trip says which was gained.
+  next stretch before the drive reaches it when the stretch could not be named on the phone. The note in the trip says which was gained.
 - Same course, and the current route is not Google's line (`RouteHeal.offGoogleLine`: the open
   router's own route, or an on-device one) while the candidate is (`GOOGLE_HYBRID` or
   `GOOGLE_LINE_NAMED`, real steps, names not short): in a car the candidate replaces it

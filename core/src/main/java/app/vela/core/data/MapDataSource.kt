@@ -133,6 +133,10 @@ interface MapDataSource {
 
     suspend fun placePhotoPage(featureId: String, pageToken: String = ""): app.vela.core.data.google.parse.PhotoPage? = null
 
+    /** [route], whose steps are named only up to [Route.namedToM], named one stretch further from
+     *  the map tiles (`HeadNaming.nameNext`). Null when there is nothing to name or it failed. */
+    suspend fun nameAhead(route: app.vela.core.model.Route, mode: TravelMode): app.vela.core.model.Route? = null
+
     suspend fun directions(
         origin: LatLng,
         destination: LatLng,

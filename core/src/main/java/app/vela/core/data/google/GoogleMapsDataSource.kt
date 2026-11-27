@@ -1925,9 +1925,36 @@ class GoogleMapsDataSource @Inject constructor(
         app.vela.core.data.naming.RoadNameTiles.linesAlong(route.polyline)
             ?.let { lines -> app.vela.core.data.naming.LineNamer.name(route, lines, mode) }
             ?.let { return it }
-        return app.vela.core.data.naming.HeadNaming.name(route) { head ->
-            app.vela.core.data.naming.RoadNameTiles.linesAlong(head.polyline)
-                ?.let { lines -> app.vela.core.data.naming.LineNamer.name(head, lines, mode) }
+        return app.vela.core.data.naming.HeadNaming.name(route) { head -> stretchNamed(head, mode) }
+    }
+
+    private suspend fun stretchNamed(stretch: Route, mode: TravelMode): Route? =
+        app.vela.core.data.naming.RoadNameTiles.linesAlong(stretch.polyline)
+            ?.let { lines -> app.vela.core.data.naming.LineNamer.name(stretch, lines, mode) }
+
+    override suspend fun nameAhead(route: Route, mode: TravelMode): Route? = io {
+        if (route.namedToM == null) return@io null
+        // Tiles that could not be read (no signal) are tried again later; tiles that were read
+        // but name too little of the stretch leave it on Google's steps and move on past it.
+        var tilesRead = false
+        var share = 0.0
+        val named = kotlinx.coroutines.withTimeoutOrNull(NAME_AHEAD_WAIT_MS) {
+            app.vela.core.data.naming.HeadNaming.nameNext(route) { stretch ->
+                val lines = app.vela.core.data.naming.RoadNameTiles.linesAlong(stretch.polyline) ?: return@nameNext null
+                tilesRead = true
+                app.vela.core.data.naming.LineNamer.name(stretch, lines, mode)
+                    .also { share = app.vela.core.data.naming.LineNamer.lastNamedShare }
+            }
+        }
+        when {
+            named != null -> named
+            tilesRead -> app.vela.core.data.naming.HeadNaming.skipNext(route)?.also {
+                diag.record("directions", "name ahead: ${(share * 100).toInt()}% of the stretch from ${route.namedToM.toInt()} m named in the tiles, left on Google's steps", "")
+            }
+            else -> {
+                diag.record("directions", "name ahead: the tiles from ${route.namedToM.toInt()} m could not be read", "")
+                null
+            }
         }
     }
 
@@ -2533,6 +2560,8 @@ class GoogleMapsDataSource @Inject constructor(
         const val WALK_GOOGLE_SHORTER = 0.15
         private const val WALK_GOOGLE_WAIT_MS = 6_000L
         private const val WALK_NAME_WAIT_MS = 8_000L
+        /** How long naming the next stretch of a long route may take (up to 48 tiles fetched). */
+        private const val NAME_AHEAD_WAIT_MS = 30_000L
         private const val SPUR_TURN_NEAR_M = 150.0
     private const val SNAP_LENGTH_SLACK = 1.05
         private const val SNAP_LENGTH_SLACK_M = 400.0

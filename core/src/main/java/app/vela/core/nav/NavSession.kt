@@ -134,6 +134,10 @@ class NavSession @Inject constructor(
     private var degradedFastRechecks = 0
     private var tripStartMs = 0L
     private var recheckJob: Job? = null
+    // Naming a long route ahead, a stretch at a time (maybeNameAhead).
+    private var nameAheadJob: Job? = null
+    @Volatile private var nameAheadFailed: Route? = null
+    @Volatile private var nameAheadRetryAtMs = 0L
     // Reroute discipline: SINGLE-FLIGHT (two racing fetches used to swap the route twice, last
     // writer wins), a COOLDOWN between adoptions (no "Rerouting… Rerouting…" every 4 s while GPS
     // is biased toward a parallel road), the voice line rate-limited separately (a silent retry
@@ -217,6 +221,9 @@ class NavSession @Inject constructor(
     // faster-route sheet popping up over a replay). Route swaps that happened in the REAL drive
     // are recorded in the trip and played back via [replaySetRoute].
     @Volatile var replayMode = false
+    /** A demo drive (Simulate driving) names a long route ahead as a real drive does: it reads only
+     *  map tiles. A replay of a recorded trip stays hermetic and leaves it off. */
+    @Volatile var nameAheadInReplay = false
     /** A replay running through fixes to reach a moment: no buzzes (the voice is muted by the caller). */
     @Volatile var silent = false
     // Settings -> Data & privacy -> "Live traffic re-checks". Each recheck sends the CURRENT
@@ -821,6 +828,59 @@ class NavSession @Inject constructor(
         // A recheck starts from where the phone is, never from a dead-reckoned or held point, a
         // poor fix, or a fix the engine is already counting as off the line ([recheckFrom]).
         if (recheckFrom(trusted, next.offRouteHits)) maybeRecheck(loc, next)
+        maybeNameAhead(next)
+    }
+
+    /**
+     * A long route named only up to [Route.namedToM] (`HeadNaming`) is named one stretch further,
+     * again and again until it is named to the destination, so every turn of the trip is a real
+     * step and does not wait on a re-check. Each stretch lies past the step the rider is heading
+     * for, so the steps before it keep their indices and the swap keeps the drive's state. A route
+     * that changed while its stretch was named is left alone (the next fix names the new one);
+     * a stretch that could not be named is tried again after [NAME_AHEAD_RETRY_MS].
+     */
+    private fun maybeNameAhead(nav: NavState) {
+        if ((replayMode && !nameAheadInReplay) || nav.offRoute || nav.arrived) return
+        val route = _state.value.route ?: return
+        if (route.namedToM == null || nameAheadJob?.isActive == true) return
+        val now = SystemClock.elapsedRealtime()
+        if (route === nameAheadFailed && now < nameAheadRetryAtMs) return
+        val gen = sessionGen
+        nameAheadJob = scope.launch {
+            val named = runCatching { dataSource.nameAhead(route, mode) }.getOrNull()
+            if (gen != sessionGen || _state.value.route !== route) return@launch
+            if (named == null) {
+                nameAheadFailed = route
+                nameAheadRetryAtMs = SystemClock.elapsedRealtime() + NAME_AHEAD_RETRY_MS
+                note("name ahead: the stretch from ${route.namedToM?.toInt()} m could not be named, trying again later")
+                return@launch
+            }
+            // The first step that changed (the one before the stretch only runs further, which
+            // the drive measures on the line): the rider must not be past it yet.
+            val old = route.maneuvers
+            fun same(a: app.vela.core.model.Maneuver, b: app.vela.core.model.Maneuver) =
+                a.type == b.type && a.instruction == b.instruction && a.location == b.location
+            val k = old.indices.firstOrNull { it >= named.maneuvers.size || !same(old[it], named.maneuvers[it]) } ?: old.size
+            var swapped = false
+            synchronized(stopLock) {
+                val st = _state.value
+                if (st.route === route && st.nav.stepIndex <= k) {
+                    if (planRoute === route) planRoute = named
+                    _state.update {
+                        it.copy(route = named, nav = if (it.nav.chainedStep > k) it.nav.copy(chainedStep = -1) else it.nav)
+                    }
+                    swapped = true
+                }
+            }
+            if (!swapped) {
+                nameAheadFailed = route
+                nameAheadRetryAtMs = SystemClock.elapsedRealtime() + NAME_AHEAD_RETRY_MS
+            }
+            note(
+                if (swapped) "name ahead: named to ${named.namedToM?.toInt()?.let { "$it m" } ?: "the destination"}, steps ${old.size} -> ${named.maneuvers.size}"
+                else "name ahead: dropped, the drive is already past the stretch",
+            )
+        }
     }
 
     /** The next stop as the engine needs it for its approach cue: its mark, its name, which side
@@ -1900,6 +1960,7 @@ class NavSession @Inject constructor(
         /** A paused drive resumes itself only going within this of the route's own way. */
         const val AUTO_RESUME_DEG = 45.0
         const val RECHECK_INTERVAL_MS = 120_000L   // re-check traffic every ~2 min
+        const val NAME_AHEAD_RETRY_MS = 60_000L    // a stretch of a long route that could not be named
         const val DEGRADED_RECHECK_INTERVAL_MS = 20_000L // fast heal cadence while the route is degraded
         const val NETWORK_BACK_MIN_GAP_MS = 10_000L // [onNetworkBack] at most this often
         const val BACK_TO_ROUTE_BEHIND_M = 500.0  // the way back may point this far behind where the car left the route
