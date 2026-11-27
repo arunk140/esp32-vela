@@ -131,6 +131,8 @@ What Vela Maps does today, one line per feature. How each one works is in [SPEC.
   each with its time and distance. "No-toll route option" turns it off.
 - Motorcycle mode (Settings > Navigation): a Motorcycle tab beside Drive keeps the trip off roads
   closed to motorcycles, offline where a region is downloaded. A two-wheeler link picks it.
+- A long trip names every turn to the destination from the map, 20 km at a time while you drive,
+  instead of keeping Google's shortened step list past the first stretch.
 - Walking uses the open foot router. "Bike routes prefer bike lanes and quiet streets" is on by
   default.
 - Ride a GPX track: open or share a `.gpx` file with Vela and the trip to its end follows the
