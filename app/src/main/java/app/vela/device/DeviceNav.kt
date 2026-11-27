@@ -1,5 +1,7 @@
 package app.vela.device
 
+import app.vela.core.data.naming.HeadNaming
+
 import app.vela.core.model.LatLng
 import app.vela.core.model.Maneuver
 import app.vela.core.model.ManeuverType
@@ -71,10 +73,14 @@ data class DeviceNavFrame(
          * The line under the distance: the road being entered, else its number, else the
          * place for the last step, else the instruction the phone's own banner shows. Many
          * steps carry no road (a fork, a ramp, a turn onto a lane with no name), and the
-         * instruction is always there.
+         * instruction is always there. An instruction that says the step takes a flyover,
+         * stays below one, or goes through a tunnel wins over the road name: the device reads
+         * those words to show its road badge (`HeadNaming.mentionsRoadKind`).
          */
         private fun lineFor(next: Maneuver?, destination: String): String {
             if (next == null) return ""
+            val said = next.instruction.trim()
+            if (HeadNaming.mentionsRoadKind(said) && !HeadNaming.mentionsRoadKind(next.road)) return said
             next.road?.takeIf { it.isNotBlank() }?.let { return it }
             next.ref?.takeIf { it.isNotBlank() }?.let { return it }
             if (next.type == ManeuverType.ARRIVE && destination.isNotBlank()) return destination
@@ -215,6 +221,7 @@ class DeviceNavEncoder(private val out: Out) {
         const val ROUTE_MAX_POINTS = 2048
 
         private fun u16(v: Int) = v.coerceIn(0, 0xFFFF).toShort()
+
         private fun e7(deg: Double) = Math.round(deg * 1e7).toInt()
 
         /** 12 bytes: type, flags, maneuver, u16 dist, after maneuver, u16 after dist, u16

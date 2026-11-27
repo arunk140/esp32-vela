@@ -93,7 +93,9 @@ object DirectionsParser {
         val polyline = googleGeometry?.takeIf { it.size >= 2 } ?: listOfNotNull(start, end)
         // A reply with no step list still drives: a start and an arrival, so the drive tracks
         // progress and arrives (the nav engine does nothing on a route with no steps).
-        val maneuvers = placeManeuvers(collectSteps(route), polyline).ifEmpty { bareSteps(polyline, distance, typicalDur) }
+        val markup = collectSteps(route)
+        val maneuvers = (runCatching { fullSteps(route, polyline, markup.size) }.getOrNull() ?: placeManeuvers(markup, polyline))
+            .ifEmpty { bareSteps(polyline, distance, typicalDur) }
         // The legs of a trip asked through stops, each timed on its own. Kept only when they tile
         // the trip's distance; a direct trip's single leg says nothing the summary does not.
         val legTimes = route.atPath(P, "legs", 1).arr()?.mapNotNull { leg ->
@@ -117,6 +119,7 @@ object DirectionsParser {
             typicalHighSeconds = typicalHigh,
             exitSigns = runCatching { exitSigns(route) }.getOrDefault(emptyList()),
             stepNames = runCatching { stepNames(route) }.getOrDefault(emptyList()),
+            roadKindSteps = runCatching { roadKindSteps(route) }.getOrDefault(emptyList()),
         )
     }
 
@@ -253,6 +256,84 @@ object DirectionsParser {
         }
     }
 
+    /**
+     * Every step of [route] from its structured parts ([forEachStep]): its words, its own point and
+     * the turn its icon draws (`dir-tt-turn-slight-left`, `dir-tt-merge`, ...), each placed where
+     * its point lies on [polyline]. The `<step>` markup ([collectSteps]) is on only some steps, and
+     * the steps it leaves out are often the ones that matter ("Keep right to take the flyover",
+     * a slight left between two turns). Null, and the markup list stands, when the structured
+     * steps are fewer than [markupCount] or any point is off the line or out of order.
+     */
+    internal fun fullSteps(route: JsonElement, polyline: List<LatLng>, markupCount: Int): List<Maneuver>? {
+        if (polyline.size < 2) return null
+        data class Raw(val at: LatLng, val text: String, val icon: String?)
+        val raw = ArrayList<Raw>()
+        forEachStepIcon(route) { st, icon ->
+            val lat = st.at(7, 2, 2).dbl() ?: return@forEachStepIcon
+            val lng = st.at(7, 2, 3).dbl() ?: return@forEachStepIcon
+            val text = stepParts(st).joinToString("") { it.text }.replace(WS, " ").trim()
+            if (text.isNotEmpty()) raw += Raw(LatLng(lat, lng), text, icon)
+        }
+        if (raw.size < 2 || raw.size < markupCount) return null
+        val cum = app.vela.core.nav.RouteProjection.cumulative(polyline)
+        val along = DoubleArray(raw.size)
+        for (i in raw.indices) {
+            along[i] = if (i == 0) 0.0
+            else app.vela.core.nav.RouteProjection.alongMeters(polyline, cum, raw[i].at, FULL_STEP_OFF_M) ?: return null
+            if (i > 0 && along[i] < along[i - 1] - 1.0) return null
+        }
+        val total = cum.last()
+        return raw.mapIndexed { i, r ->
+            val lane = LANE_PHRASE.find(r.text)
+            val text = (lane?.let { r.text.removeRange(it.range) } ?: r.text).trim().replaceFirstChar { it.uppercase() }
+            val end = if (i == raw.lastIndex) total else along[i + 1]
+            val type = if (i == 0) ManeuverType.DEPART else iconType(r.icon, text)
+            Maneuver(
+                type = type,
+                instruction = text,
+                location = if (i == 0) polyline.first() else app.vela.core.nav.RouteProjection.pointAt(polyline, cum, along[i]),
+                distanceMeters = (end - along[i]).coerceAtLeast(0.0),
+                durationSeconds = 0.0,
+                laneHint = lane?.groupValues?.get(1)?.trim(),
+            )
+        }
+    }
+
+
+    /** A structured step's point may sit this far off Google's own line and still be its step. */
+    private const val FULL_STEP_OFF_M = 60.0
+
+    /** The turn a step's icon draws; "Keep left/right" is drawn as a turn and said as a keep. */
+    internal fun iconType(icon: String?, text: String): ManeuverType {
+        val i = icon.orEmpty().removePrefix("dir-tt-")
+        val low = text.lowercase()
+        val left = "left" in i
+        fun lr(l: ManeuverType, r: ManeuverType) = if (left) l else r
+        return when {
+            i.isEmpty() -> when {
+                low.startsWith("keep left") -> ManeuverType.KEEP_LEFT
+                low.startsWith("keep right") -> ManeuverType.KEEP_RIGHT
+                low.startsWith("turn left") -> ManeuverType.TURN_LEFT
+                low.startsWith("turn right") -> ManeuverType.TURN_RIGHT
+                low.startsWith("slight left") -> ManeuverType.SLIGHT_LEFT
+                low.startsWith("slight right") -> ManeuverType.SLIGHT_RIGHT
+                low.startsWith("make a u-turn") -> ManeuverType.UTURN
+                low.startsWith("merge") -> ManeuverType.MERGE
+                else -> ManeuverType.STRAIGHT
+            }
+            "roundabout" in i -> ManeuverType.ROUNDABOUT
+            "u-turn" in i || "uturn" in i -> ManeuverType.UTURN
+            "merge" in i -> ManeuverType.MERGE
+            "ramp" in i -> lr(ManeuverType.RAMP_LEFT, ManeuverType.RAMP_RIGHT)
+            "fork" in i -> lr(ManeuverType.FORK_LEFT, ManeuverType.FORK_RIGHT)
+            "keep" in i || low.startsWith("keep ") -> lr(ManeuverType.KEEP_LEFT, ManeuverType.KEEP_RIGHT)
+            "slight" in i -> lr(ManeuverType.SLIGHT_LEFT, ManeuverType.SLIGHT_RIGHT)
+            "sharp" in i -> lr(ManeuverType.SHARP_LEFT, ManeuverType.SHARP_RIGHT)
+            "turn" in i -> lr(ManeuverType.TURN_LEFT, ManeuverType.TURN_RIGHT)
+            else -> ManeuverType.STRAIGHT
+        }
+    }
+
     /** Position each maneuver at its *actual* cumulative step distance along the
      *  route line. Using the polyline's own length as the denominator (not the
      *  summed step distances) matters: Google's step `meters` and its geometry
@@ -307,6 +388,43 @@ object DirectionsParser {
     internal fun stepNames(route: JsonElement): List<app.vela.core.model.StepName> =
         ArrayList<app.vela.core.model.StepName>().also { out -> forEachStep(route) { st, _ -> stepName(st)?.let { out += it } } }
 
+    /** Every step of [route], nested ones included, whose words name a flyover, an underpass or a
+     *  tunnel: Google often says "take the flyover" in a step under a longer one. With `VelaSteps`
+     *  at DEBUG every step's words are logged (a test phone only: they carry street names). */
+    internal fun roadKindSteps(route: JsonElement): List<app.vela.core.model.RoadKindStep> {
+        val log = runCatching { android.util.Log.isLoggable("VelaSteps", android.util.Log.DEBUG) }.getOrDefault(false)
+        val out = ArrayList<app.vela.core.model.RoadKindStep>()
+        stepLog = log
+        forEachStep(route) { st, _ ->
+            val lat = st.at(7, 2, 2).dbl() ?: return@forEachStep
+            val lng = st.at(7, 2, 3).dbl() ?: return@forEachStep
+            val text = stepParts(st).joinToString("") { it.text }.trim()
+            if (log) runCatching { android.util.Log.d("VelaSteps", "google step | $text") }
+            if (app.vela.core.data.naming.HeadNaming.mentionsRoadKind(text)) out += app.vela.core.model.RoadKindStep(LatLng(lat, lng), text)
+        }
+        stepLog = false
+        return out
+    }
+
+    /** Calls [f] with every step of [route] and its turn icon (`dir-tt-...`, null without one). */
+    private fun forEachStepIcon(route: JsonElement, f: (JsonArray, String?) -> Unit) {
+        fun isStep(n: JsonElement?): Boolean {
+            val a = n.arr() ?: return false
+            return a.size > 14 && a[14] is JsonArray && a.at(7, 2, 2).dbl() != null && a.at(7, 2, 3).dbl() != null
+        }
+        fun walk(n: JsonElement) {
+            val a = n as? JsonArray ?: return
+            if (a.isNotEmpty() && isStep(a[0])) {
+                val icon = a.drop(1).firstNotNullOfOrNull { p -> p.arr()?.firstNotNullOfOrNull { DIR_ICON.find(it.str().orEmpty())?.value } }
+                f(a[0] as JsonArray, icon)
+                return
+            }
+            if (isStep(a)) { f(a, null); return }
+            a.forEach(::walk)
+        }
+        walk(route)
+    }
+
     /** Calls [f] with every step of [route] and the side its ramp icon shows (null without one). */
     private fun forEachStep(route: JsonElement, f: (JsonArray, Boolean?) -> Unit) {
         fun isStep(n: JsonElement?): Boolean {
@@ -316,6 +434,10 @@ object DirectionsParser {
         fun walk(n: JsonElement) {
             val a = n as? JsonArray ?: return
             if (a.isNotEmpty() && isStep(a[0])) {
+                if (stepLog) runCatching {
+                    val icons = a.drop(1).flatMap { p -> p.arr()?.mapNotNull { DIR_ICON.find(it.str().orEmpty())?.value }.orEmpty() }
+                    android.util.Log.d("VelaSteps", "google step icon ${icons.joinToString(",")}")
+                }
                 val icon = a.drop(1).firstNotNullOfOrNull { p -> p.arr()?.firstNotNullOfOrNull { RAMP_ICON.find(it.str().orEmpty()) } }
                 f(a[0] as JsonArray, icon?.groupValues?.get(1)?.let { it == "left" })
                 return
@@ -363,6 +485,9 @@ object DirectionsParser {
     private enum class Part { NUMBER, TOWARD, ONTO, FOR, OTHER }
     private val EXIT_WORD = Regex("\\b(exit|junction)\\b", RegexOption.IGNORE_CASE)
     private val RAMP_ICON = Regex("dir-tt-ramp-(left|right)")
+    private val DIR_ICON = Regex("dir-tt-[a-z-]+")
+    /** Set while [roadKindSteps] logs every step (`VelaSteps` at DEBUG, a test phone only). */
+    @Volatile private var stepLog = false
     private val ROUTE_NUMBER = Regex("^[A-Z]{1,3}-?[0-9]{1,4}[A-Z]?( [NSEW]| North| South| East| West)?$")
 
     /** The exit [step] is, or null when it is no exit: its instruction names an exit or a motorway

@@ -1924,8 +1924,21 @@ class GoogleMapsDataSource @Inject constructor(
     private suspend fun tileNamed(route: Route, mode: TravelMode): Route? {
         app.vela.core.data.naming.RoadNameTiles.linesAlong(route.polyline)
             ?.let { lines -> app.vela.core.data.naming.LineNamer.name(route, lines, mode) }
-            ?.let { return it }
+            ?.let { named -> return app.vela.core.data.naming.HeadNaming.keepGoogleTurns(route, named).also { logTileSteps(route, it) } }
         return app.vela.core.data.naming.HeadNaming.name(route) { head -> stretchNamed(head, mode) }
+    }
+
+    /** Google's steps and the steps named from the tiles, for a test phone only (`VelaSteps` at
+     *  DEBUG, as the hybrid path logs its steps). Instructions carry street names. */
+    private fun logTileSteps(google: Route, named: Route) = runCatching {
+        if (!android.util.Log.isLoggable("VelaSteps", android.util.Log.DEBUG)) return@runCatching
+        for ((tag, r) in listOf("google" to google, "tiles" to named)) {
+            var at = 0.0
+            for (m in r.maneuvers) {
+                android.util.Log.d("VelaSteps", "$tag ${at.toInt()} m ${m.type} len=${m.distanceMeters.toInt()} | ${m.instruction}")
+                at += m.distanceMeters
+            }
+        }
     }
 
     private suspend fun stretchNamed(stretch: Route, mode: TravelMode): Route? =

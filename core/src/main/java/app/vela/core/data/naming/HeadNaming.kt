@@ -4,6 +4,7 @@ import app.vela.core.data.RouteGeometry
 import app.vela.core.model.LatLng
 import app.vela.core.model.Maneuver
 import app.vela.core.model.ManeuverType
+import app.vela.core.model.RoadRename
 import app.vela.core.model.Route
 import app.vela.core.model.RouteLeg
 import app.vela.core.model.RouteSource
@@ -187,9 +188,46 @@ object HeadNaming {
         val n = tiles.maneuvers
         if (n.size < 2 || n.first().type != ManeuverType.DEPART || n.last().type != ManeuverType.ARRIVE) return null
         val google = route.maneuvers.indices
-            .filter { !along[it].isNaN() && along[it] > fromM + KEEP_EDGE_M && along[it] < cutM - KEEP_EDGE_M && route.maneuvers[it].type in KEPT_TYPES }
+            .filter { !along[it].isNaN() && along[it] > fromM + KEEP_EDGE_M && along[it] < cutM - KEEP_EDGE_M && route.maneuvers[it].type !in ENDS }
             .map { route.maneuvers[it] to along[it] - fromM }
+            .let { it + roadKindAlong(route, cum, it.map { g -> g.first to g.second + fromM }).filter { s -> s.second > fromM + KEEP_EDGE_M && s.second < cutM - KEEP_EDGE_M }.map { s -> s.first to s.second - fromM } }
         return join(route, cum, along, withGoogleTurns(tiles, google), fromM, cutM)
+    }
+
+    /** [named], [route] named whole from the tiles on [route]'s own line, with each of [route]'s
+     *  turns the tiles missed put back ([withGoogleTurns]), as a stretch gets. */
+    fun keepGoogleTurns(route: Route, named: Route): Route {
+        if (route.legs.size != 1 || route.polyline.size < 2 || named.legs.size != 1) return named
+        val cum = RouteProjection.cumulative(route.polyline)
+        val along = stepsAlong(route, cum)
+        val total = cum.last()
+        val google = route.maneuvers.indices
+            .filter { !along[it].isNaN() && along[it] > KEEP_EDGE_M && along[it] < total - KEEP_EDGE_M && route.maneuvers[it].type !in ENDS }
+            .map { route.maneuvers[it] to along[it] }
+            .let { it + roadKindAlong(route, cum, it).filter { s -> s.second > KEEP_EDGE_M && s.second < total - KEEP_EDGE_M } }
+        return withGoogleTurns(named, google)
+    }
+
+    /** [Route.roadKindSteps] as straight steps at their meters along [route], each one that no
+     *  step of [google] near it already says. */
+    private fun roadKindAlong(route: Route, cum: DoubleArray, google: List<Pair<Maneuver, Double>>): List<Pair<Maneuver, Double>> =
+        route.roadKindSteps.mapNotNull { s ->
+            val at = RouteProjection.alongMeters(route.polyline, cum, s.at, MATCH_M) ?: return@mapNotNull null
+            if (google.any { abs(it.second - at) < KEEP_NEAR_M && mentionsRoadKind(it.first.instruction) }) return@mapNotNull null
+            Maneuver(ManeuverType.STRAIGHT, s.text, s.at, 0.0, 0.0) to at
+        }.distinctBy { it.second.toInt() / 50 }
+
+
+    private val ENDS = setOf(ManeuverType.DEPART, ManeuverType.ARRIVE)
+
+    /** Words that say a step takes a flyover, stays below one, or goes through a tunnel. The nav
+     *  device matches the same words for its road badge. */
+    private val ROAD_WORDS = listOf("flyover", "overpass", "elevated", "overbridge", "tunnel", "underpass", "service road")
+
+    fun mentionsRoadKind(s: String?): Boolean {
+        if (s.isNullOrEmpty()) return false
+        val low = s.lowercase()
+        return ROAD_WORDS.any { it in low }
     }
 
     /** Google's turns that [withGoogleTurns] keeps: every step that changes the course or the road. */
@@ -202,13 +240,19 @@ object HeadNaming {
     private const val KEEP_EDGE_M = 50.0
 
     /**
-     * [named] with each of Google's [turns] (a step and its meters into the stretch) that has no
-     * named step within [KEEP_NEAR_M] put in at its place: the tiles can miss a junction (an
-     * unnamed road, a link the tiles do not carry), and a turn Google says is there is not dropped.
-     * The step before it now ends there; the Google step runs on to where that one did.
+     * [named] checked against Google's own steps ([google]: each step and its meters into the
+     * stretch). Google decides what kind of step a corner is; the tiles name it.
+     * - A tiles' U-turn (a bend of 165 degrees or more on the line) that Google does not call a
+     *   U-turn takes the type and words of Google's step within [KEEP_NEAR_M], or with none there is
+     *   a bend of the road and is folded into the step before it.
+     * - A Google step that names a flyover, an underpass or a tunnel ([mentionsRoadKind]) gives its
+     *   words to the tiles' step within [KEEP_NEAR_M], or is put in at its place.
+     * - A Google turn ([KEPT_TYPES]) with no named step within [KEEP_NEAR_M] is put in at its place:
+     *   the tiles can miss a junction, and a turn Google says is there is not dropped. The step
+     *   before it now ends there; the Google step runs on to where that one did.
      */
-    fun withGoogleTurns(named: Route, turns: List<Pair<Maneuver, Double>>): Route {
-        if (turns.isEmpty()) return named
+    fun withGoogleTurns(named: Route, google: List<Pair<Maneuver, Double>>): Route {
+        if (google.isEmpty()) return named
         val pc = RouteProjection.cumulative(named.polyline)
         val steps = named.maneuvers
         val list = ArrayList<Pair<Maneuver, Double>>()
@@ -220,18 +264,59 @@ object HeadNaming {
             }
             list += steps[i] to at
         }
-        var added = 0
-        for ((g, gAt) in turns.sortedBy { it.second }) {
-            if (list.any { !it.second.isNaN() && abs(it.second - gAt) < KEEP_NEAR_M }) continue
+        fun googleNear(at: Double) = google.filter { abs(it.second - at) < KEEP_NEAR_M }.minByOrNull { abs(it.second - at) }?.first
+        fun takeWords(m: Maneuver, g: Maneuver, type: ManeuverType) = m.copy(
+            type = type, instruction = g.instruction, instructionNoRoad = g.instructionNoRoad,
+            road = g.road ?: m.road, ref = g.ref ?: m.ref, lanes = m.lanes.ifEmpty { g.lanes },
+        )
+        var changed = false
+
+        // U-turns Google does not have.
+        for (i in list.lastIndex - 1 downTo 1) {
+            val (m, at) = list[i]
+            if (m.type != ManeuverType.UTURN || at.isNaN()) continue
+            val g = googleNear(at)
+            if (g?.type == ManeuverType.UTURN) continue
+            changed = true
+            if (g != null) {
+                list[i] = takeWords(m, g, g.type) to at
+            } else {
+                val (prev, prevAt) = list[i - 1]
+                val gap = prev.distanceMeters
+                list[i - 1] = prev.copy(
+                    distanceMeters = prev.distanceMeters + m.distanceMeters,
+                    durationSeconds = prev.durationSeconds + m.durationSeconds,
+                    renames = prev.renames + listOfNotNull(
+                        RoadRename(gap, m.road, m.ref).takeIf { m.road != null || m.ref != null },
+                    ) + m.renames.map { it.copy(atMeters = it.atMeters + gap) },
+                ) to prevAt
+                list.removeAt(i)
+            }
+        }
+
+        for ((g, gAt) in google.sortedBy { it.second }) {
+            val words = mentionsRoadKind(g.instruction)
+            if (g.type !in KEPT_TYPES && !words) continue
+            val near = list.indices.filter { !list[it].second.isNaN() && abs(list[it].second - gAt) < KEEP_NEAR_M }
+                .minByOrNull { abs(list[it].second - gAt) }
+            if (near != null) {
+                // A step stands for it; the flyover's words go onto that step.
+                val (m, at) = list[near]
+                if (words && near in 1 until list.lastIndex && !mentionsRoadKind(m.instruction)) {
+                    list[near] = takeWords(m, g, if (g.type in KEPT_TYPES) g.type else m.type) to at
+                    changed = true
+                }
+                continue
+            }
             val j = list.indices.lastOrNull { it < list.lastIndex && !list[it].second.isNaN() && list[it].second < gAt } ?: continue
             val (prev, prevAt) = list[j]
             val prevEnd = prevAt + prev.distanceMeters
             val share = if (prev.distanceMeters > 0) (gAt - prevAt) / prev.distanceMeters else 1.0
             list[j] = prev.copy(distanceMeters = gAt - prevAt, durationSeconds = prev.durationSeconds * share, renames = prev.renames.filter { it.atMeters < gAt - prevAt }) to prevAt
             list.add(j + 1, g.copy(distanceMeters = (prevEnd - gAt).coerceAtLeast(0.0), durationSeconds = prev.durationSeconds * (1 - share)) to gAt)
-            added++
+            changed = true
         }
-        if (added == 0) return named
+        if (!changed) return named
         val leg = named.legs.single()
         return named.copy(legs = listOf(leg.copy(maneuvers = list.map { it.first })))
     }
