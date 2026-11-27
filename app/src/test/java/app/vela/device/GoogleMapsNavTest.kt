@@ -18,6 +18,9 @@ class GoogleMapsNavTest {
         assertEquals(76 * 60, f.remainingS)
         assertEquals(true, f.active)
         assertNull(f.dest)
+        assertEquals(true, f.turnOnly)
+        // On the wire: active, 10 m units and turn only.
+        assertEquals(0x01 or 0x04 or 0x08, DeviceNavEncoder.state(f)[1].toInt())
     }
 
     @Test fun theLastMetersBeforeATurnShowNoFigure() {

@@ -7400,7 +7400,7 @@ Messages, all little-endian:
 | Message | Bytes | Fields | Sent |
 | --- | --- | --- | --- |
 | POSITION | 18 | lat and lon in 1e-7 degrees, speed cm/s, course 0.01 degrees, satellites (0), fix, phone clock ms | each fix, about 1 Hz |
-| NAV STATE `0x01` | 12 | flags (bit 0 active, bit 2 remaining distance in units of 10 m), maneuver, meters to it, the maneuver after, meters between the two, remaining distance, remaining seconds | on each session change and every 1 s |
+| NAV STATE `0x01` | 12 | flags (bit 0 active, bit 2 remaining distance in units of 10 m, bit 3 turn only: no route line, which bike-os shows as a full-screen turn card), maneuver, meters to it, the maneuver after, meters between the two, remaining distance, remaining seconds | on each session change and every 1 s |
 | NAV TEXT `0x02` | 2 + up to 48 | length, then UTF-8: the road being entered, else its number, else the destination for the last step, else the step's instruction | when it changes |
 | NAV DEST `0x03` | 10 | present, lat, lon | when it changes |
 | NAV ROUTE `0x04` | 4 + 8 per point | flags (start, end), sequence, count, up to 31 points | when the session's `Route` object changes |
@@ -7457,7 +7457,7 @@ the arrival ("Arrive 16:16"). The frame has the turn read from the instruction's
 was counting down and shows none is sent as `NEAR_M`, 40 m, and one at the start as 0), the road
 after "onto", "toward", "to stay on" or "via" (else the instruction), the meters left as
 progress max minus progress, and the time left to the arrival clock time (the next day when it
-is more than 5 minutes past). `DeviceService.pushNav` sends it in place of the idle frame, with
+is more than 5 minutes past). `DeviceService.pushNav` sends it in place of the idle frame, flagged turn only (bit 3), with
 no route line, no stops and no destination: Google Maps publishes none. The removed
 notification clears it. Nothing is logged or kept. With either switch on, `DeviceService`
 asks Android to bind the listener again (`DeviceMediaListener.rebindIfNeeded`,

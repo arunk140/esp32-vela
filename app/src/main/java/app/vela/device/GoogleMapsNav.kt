@@ -82,6 +82,7 @@ object GoogleMapsNav {
             street = street,
             remainingM = remaining,
             remainingS = arrivalSeconds(subText, nowMs) ?: 0,
+            turnOnly = true,
         )
     }
 
