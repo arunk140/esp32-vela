@@ -40,9 +40,36 @@ class TurnArrowGeometryTest {
         assertEquals(1, TurnArrowGeometry.arrows(lShape, 1).size)
     }
 
-    @Test fun aStraightStepGetsNone() {
-        val straight = route(listOf(a, corner, b), m(ManeuverType.DEPART, a), m(ManeuverType.STRAIGHT, corner), m(ManeuverType.ARRIVE, b))
+    /** Google's "Continue onto" is parsed as STRAIGHT: at a corner it gets an arrow, on a straight road none. */
+    @Test fun aStraightStepGetsOneOnlyAtACorner() {
+        val atCorner = route(listOf(a, corner, b), m(ManeuverType.DEPART, a), m(ManeuverType.STRAIGHT, corner), m(ManeuverType.ARRIVE, b))
+        assertEquals(1, TurnArrowGeometry.arrows(atCorner, 0).size)
+        val far = a.destinationPoint(400.0, 0.0)
+        val straight = route(listOf(a, corner, far), m(ManeuverType.DEPART, a), m(ManeuverType.STRAIGHT, corner), m(ManeuverType.ARRIVE, far))
         assertEquals(0, TurnArrowGeometry.arrows(straight, 0).size)
+    }
+
+    /** "Continue onto" at a corner (the road's name changes as it turns) gets the arrow a turn would. */
+    @Test fun aContinueAtACornerGetsAnArrow() {
+        val atCorner = route(listOf(a, corner, b), m(ManeuverType.DEPART, a), m(ManeuverType.CONTINUE, corner), m(ManeuverType.ARRIVE, b))
+        val arrow = TurnArrowGeometry.arrows(atCorner, 0).single()
+        assertTrue("corner is a vertex", arrow.points.any { it.distanceTo(corner) < 0.5 })
+        assertEquals(90.0, arrow.endBearingDeg, 3.0)
+    }
+
+    /** A continue on a straight road, or one whose bend is gentle or well past its point, gets none. */
+    @Test fun aContinueWithoutACornerGetsNone() {
+        val far = a.destinationPoint(400.0, 0.0)
+        val straight = route(listOf(a, corner, far), m(ManeuverType.DEPART, a), m(ManeuverType.CONTINUE, corner), m(ManeuverType.ARRIVE, far))
+        assertEquals(0, TurnArrowGeometry.arrows(straight, 0).size)
+
+        val gentle = corner.destinationPoint(200.0, 20.0)
+        val drift = route(listOf(a, corner, gentle), m(ManeuverType.DEPART, a), m(ManeuverType.CONTINUE, corner), m(ManeuverType.ARRIVE, gentle))
+        assertEquals(0, TurnArrowGeometry.arrows(drift, 0).size)
+
+        val early = a.destinationPoint(100.0, 0.0)
+        val later = route(listOf(a, corner, b), m(ManeuverType.DEPART, a), m(ManeuverType.CONTINUE, early), m(ManeuverType.ARRIVE, b))
+        assertEquals(0, TurnArrowGeometry.arrows(later, 0).size)
     }
 
     /** A keep-left whose split lies 60 m past the maneuver point: the arrow runs on through the split. */

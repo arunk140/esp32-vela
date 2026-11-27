@@ -26,6 +26,19 @@ class RouteHealTest {
 
     private val standIn = route(traffic = false, source = RouteSource.OBF)
 
+    @Test fun `a route named only at its head is renamed ahead as the named steps run out`() {
+        val long = route(source = RouteSource.GOOGLE_LINE_NAMED).copy(distanceMeters = 280_000.0, namedToM = 20_000.0)
+        val fresh = route(source = RouteSource.GOOGLE_LINE_NAMED).copy(distanceMeters = 265_000.0, namedToM = 20_000.0)
+        // 15 km of named steps still ahead: nothing to gain yet.
+        assertNull(RouteHeal.gains(long, fresh, progressM = 5_000.0))
+        // 5 km left: the fresh route names 20 km from the car.
+        assertEquals("ahead", RouteHeal.gains(long, fresh, progressM = 15_000.0))
+        // A candidate with Google's abbreviated steps never takes over.
+        assertNull(RouteHeal.gains(long, route(abbreviated = true), progressM = 15_000.0))
+        // A route named whole is never renamed ahead.
+        assertNull(RouteHeal.gains(fresh.copy(namedToM = null), fresh, progressM = 15_000.0))
+    }
+
     @Test fun `Google's route on other roads replaces a stand-in at once, a near turn or not`() {
         assertEquals(RouteHeal.StandIn.SWITCH, RouteHeal.standIn(standIn, route(), lineOk = true, firstTurnOutOfReach = false))
     }

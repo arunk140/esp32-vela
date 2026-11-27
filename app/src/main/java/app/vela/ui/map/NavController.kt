@@ -447,6 +447,7 @@ internal class NavController(
                 val engine = _state.value.selectedEngine?.packageName
                 host.neuralSynthFor(engine)?.let { voice.neural = it }
                 navSession.replayMode = true
+                navSession.nameAheadInReplay = true // a demo drive names a long route ahead too
                 // Pass the REAL travel mode: haptics are per-mode (bike buzzes by default, driving
                 // doesn't), so a demo of a bike route must buzz like the real ride would. And the
                 // stops (2026-09-14): a demo used to start the session without them, so per-stop
@@ -497,6 +498,7 @@ internal class NavController(
                 if (replayJob === coroutineContext[Job]) {
                     replayJob = null
                     navSession.replayMode = false
+                    navSession.nameAheadInReplay = false
                     // A demo that drove to its end stops on the arrival card, as a real drive
                     // does, and Done ends it through stopNav. One that was ended early is torn
                     // down here.
@@ -844,6 +846,7 @@ internal class NavController(
                         val engine = _state.value.selectedEngine?.packageName
                         host.neuralSynthFor(engine)?.let { voice.neural = it }
                         navSession.replayMode = !live
+                        navSession.nameAheadInReplay = false
                         if (live) android.util.Log.i("VelaTrip", "replay: re-drive, rerouting live")
                         navSession.start(route, dest, meta.label, engine)
                         replayOwnsNav = true
@@ -964,6 +967,7 @@ internal class NavController(
                 if (replayJob === coroutineContext[Job]) {
                     replayJob = null
                     navSession.replayMode = false
+                    navSession.nameAheadInReplay = false
                     val ownedNav = replayOwnsNav
                     if (replayOwnsNav) { navSession.stop(); replayOwnsNav = false; host.destination = null }
                     host.clearSpeedLimit() // mirror stopNav - don't leak the replay's last limit into the next drive

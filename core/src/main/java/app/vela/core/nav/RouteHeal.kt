@@ -29,8 +29,15 @@ object RouteHeal {
      * Google route turned the car round, kept the open router's way into the destination, a
      * street off, to the end of a real drive on 2026-11-17).
      */
-    fun gains(current: Route, candidate: Route, lineOk: Boolean = false): String? {
+    fun gains(current: Route, candidate: Route, lineOk: Boolean = false, progressM: Double = 0.0): String? {
         val steps = !current.hasRealSteps && candidate.hasRealSteps
+        // A long route named only at its head ([Route.namedToM]): once the named steps left run
+        // under [AHEAD_LEFT_M], a candidate from the car named further on takes over.
+        val ahead = current.namedToM?.let { to ->
+            val left = to - progressM
+            left < AHEAD_LEFT_M && candidate.hasRealSteps && googleLine(candidate) &&
+                (candidate.namedToM ?: candidate.distanceMeters) > left + AHEAD_GAIN_M
+        } ?: false
         // Names only from a route that is Google's line: a re-check that could not build the
         // hybrid answers with the open router's own route, which runs through whatever Google
         // went around, and the same-course test samples too few points to see a short detour.
@@ -43,9 +50,14 @@ object RouteHeal {
         val loses = (current.hasRealSteps && !candidate.hasRealSteps) ||
             (current.hasLiveTraffic && !candidate.hasLiveTraffic) ||
             (current.hasRealSteps && !current.namesShort && candidate.namesShort)
-        if (loses || !(steps || names || traffic || line)) return null
-        return listOfNotNull("steps".takeIf { steps }, "names".takeIf { names }, "traffic".takeIf { traffic }, "line".takeIf { line }).joinToString("+")
+        if (loses || !(steps || names || traffic || line || ahead)) return null
+        return listOfNotNull("steps".takeIf { steps }, "names".takeIf { names }, "traffic".takeIf { traffic }, "line".takeIf { line }, "ahead".takeIf { ahead }).joinToString("+")
     }
+
+    /** A head-named route is renamed ahead when fewer named meters than this are left. */
+    const val AHEAD_LEFT_M = 10_000.0
+    /** The candidate must name at least this much further than the current route does. */
+    const val AHEAD_GAIN_M = 2_000.0
 
     private fun googleLine(r: Route): Boolean =
         r.source == RouteSource.GOOGLE_HYBRID || r.source == RouteSource.GOOGLE_LINE_NAMED

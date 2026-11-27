@@ -131,6 +131,12 @@ What Vela Maps does today, one line per feature. How each one works is in [SPEC.
   each with its time and distance. "No-toll route option" turns it off.
 - Motorcycle mode (Settings > Navigation): a Motorcycle tab beside Drive keeps the trip off roads
   closed to motorcycles, offline where a region is downloaded. A two-wheeler link picks it.
+- A long trip names every turn to the destination from the map, 20 km at a time while you drive,
+  instead of keeping Google's shortened step list past the first stretch.
+- A route named from the map keeps every turn Google gives that the map missed, on short trips too,
+  takes Google's word on a U-turn, and keeps Google's flyover, underpass and tunnel directions.
+- Google's directions keep every step Google Maps shows (both "take the flyover" steps on a road
+  with two, a slight left between turns), each at its own corner.
 - Walking uses the open foot router. "Bike routes prefer bike lanes and quiet streets" is on by
   default.
 - Ride a GPX track: open or share a `.gpx` file with Vela and the trip to its end follows the
@@ -424,6 +430,8 @@ What Vela Maps does today, one line per feature. How each one works is in [SPEC.
 - The device's map follows your position and points the way you are heading.
 - During a drive it shows the next turn, the distance to it, the road you are turning onto, the
   distance left, the route line and the destination.
+- With "Follow Google Maps" on, it shows Google Maps' next turn, its distance and the road while
+  you navigate in Google Maps instead of Vela.
 - With "What is playing" on, it shows the track and its cover, and its buttons control playback
   and volume.
 - With "Incoming calls" on, it shows who is calling, and its buttons answer or decline. Calls in
@@ -489,3 +497,6 @@ These need a Google sign-in or a Vela server, and Vela has neither.
 - A timeline of where you have been.
 - Live busyness. Popular times shows the typical week.
 - Syncing saved places between devices through an account.
+- A step that takes a flyover, stays below one, or goes through a tunnel sends its instruction to the device, which shows a small badge for it (bike-os 0.11).
+- The device shows "1/3 waypoints" with the next stop, its distance and time (`NAV_STOPS`, bike-os firmware).
+- A long route keeps full detail (5 m) for the next 20 km on the device and is sent again every 8 km of progress; up to 2048 points (bike-os 0.10+; firmware_ws146 holds 512).

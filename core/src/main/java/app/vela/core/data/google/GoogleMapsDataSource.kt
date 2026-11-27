@@ -1916,10 +1916,60 @@ class GoogleMapsDataSource @Inject constructor(
      *  drive chain names a line it could not snap. Google's own abbreviated steps when that fails,
      *  tagged so a drive's recheck upgrades them. */
     private suspend fun twoWheelerNamed(route: Route): Route =
-        kotlinx.coroutines.withTimeoutOrNull(WALK_NAME_WAIT_MS) {
-            app.vela.core.data.naming.RoadNameTiles.linesAlong(route.polyline)
-                ?.let { app.vela.core.data.naming.LineNamer.name(route, it, TravelMode.DRIVE) }
-        } ?: route.copy(provisional = false, abbreviatedSteps = true, source = RouteSource.GOOGLE_ABBREVIATED)
+        kotlinx.coroutines.withTimeoutOrNull(WALK_NAME_WAIT_MS) { tileNamed(route, TravelMode.DRIVE) }
+            ?: route.copy(provisional = false, abbreviatedSteps = true, source = RouteSource.GOOGLE_ABBREVIATED)
+
+    /** [route]'s turns named from the map tiles ([LineNamer]): the whole line, or on a line past
+     *  the tiles' cap its first stretch, Google's steps after it ([HeadNaming]). Null when neither. */
+    private suspend fun tileNamed(route: Route, mode: TravelMode): Route? {
+        app.vela.core.data.naming.RoadNameTiles.linesAlong(route.polyline)
+            ?.let { lines -> app.vela.core.data.naming.LineNamer.name(route, lines, mode) }
+            ?.let { named -> return app.vela.core.data.naming.HeadNaming.keepGoogleTurns(route, named).also { logTileSteps(route, it) } }
+        return app.vela.core.data.naming.HeadNaming.name(route) { head -> stretchNamed(head, mode) }
+    }
+
+    /** Google's steps and the steps named from the tiles, for a test phone only (`VelaSteps` at
+     *  DEBUG, as the hybrid path logs its steps). Instructions carry street names. */
+    private fun logTileSteps(google: Route, named: Route) = runCatching {
+        if (!android.util.Log.isLoggable("VelaSteps", android.util.Log.DEBUG)) return@runCatching
+        for ((tag, r) in listOf("google" to google, "tiles" to named)) {
+            var at = 0.0
+            for (m in r.maneuvers) {
+                android.util.Log.d("VelaSteps", "$tag ${at.toInt()} m ${m.type} len=${m.distanceMeters.toInt()} | ${m.instruction}")
+                at += m.distanceMeters
+            }
+        }
+    }
+
+    private suspend fun stretchNamed(stretch: Route, mode: TravelMode): Route? =
+        app.vela.core.data.naming.RoadNameTiles.linesAlong(stretch.polyline)
+            ?.let { lines -> app.vela.core.data.naming.LineNamer.name(stretch, lines, mode) }
+
+    override suspend fun nameAhead(route: Route, mode: TravelMode): Route? = io {
+        if (route.namedToM == null) return@io null
+        // Tiles that could not be read (no signal) are tried again later; tiles that were read
+        // but name too little of the stretch leave it on Google's steps and move on past it.
+        var tilesRead = false
+        var share = 0.0
+        val named = kotlinx.coroutines.withTimeoutOrNull(NAME_AHEAD_WAIT_MS) {
+            app.vela.core.data.naming.HeadNaming.nameNext(route) { stretch ->
+                val lines = app.vela.core.data.naming.RoadNameTiles.linesAlong(stretch.polyline) ?: return@nameNext null
+                tilesRead = true
+                app.vela.core.data.naming.LineNamer.name(stretch, lines, mode)
+                    .also { share = app.vela.core.data.naming.LineNamer.lastNamedShare }
+            }
+        }
+        when {
+            named != null -> named
+            tilesRead -> app.vela.core.data.naming.HeadNaming.skipNext(route)?.also {
+                diag.record("directions", "name ahead: ${(share * 100).toInt()}% of the stretch from ${route.namedToM.toInt()} m named in the tiles, left on Google's steps", "")
+            }
+            else -> {
+                diag.record("directions", "name ahead: the tiles from ${route.namedToM.toInt()} m could not be read", "")
+                null
+            }
+        }
+    }
 
     /** True when [RouteGeometry.spurAt] finds a spur on [route] AND one of the route's own
      *  maneuvers within [SPUR_TURN_NEAR_M] of it is a turn or U-turn. */
@@ -2171,10 +2221,7 @@ class GoogleMapsDataSource @Inject constructor(
         // The snap failed or was refused: keep Google's line and name its turns from the map tiles
         // (LineNamer). Only when that fails too does nav run on Google's abbreviated steps, tagged so
         // the in-drive recheck can silently upgrade to full steps once the open router answers.
-        else kotlinx.coroutines.withTimeoutOrNull(WALK_NAME_WAIT_MS) {
-            app.vela.core.data.naming.RoadNameTiles.linesAlong(route.polyline)
-                ?.let { app.vela.core.data.naming.LineNamer.name(route, it, mode) }
-        } ?: route.copy(provisional = false, abbreviatedSteps = true, source = RouteSource.GOOGLE_ABBREVIATED)
+        else kotlinx.coroutines.withTimeoutOrNull(WALK_NAME_WAIT_MS) { tileNamed(route, mode) } ?: route.copy(provisional = false, abbreviatedSteps = true, source = RouteSource.GOOGLE_ABBREVIATED)
     }
 
     /** [googleDirections] with the same transient-blip retry the OSRM path has (routeOsrm goes
@@ -2526,6 +2573,8 @@ class GoogleMapsDataSource @Inject constructor(
         const val WALK_GOOGLE_SHORTER = 0.15
         private const val WALK_GOOGLE_WAIT_MS = 6_000L
         private const val WALK_NAME_WAIT_MS = 8_000L
+        /** How long naming the next stretch of a long route may take (up to 48 tiles fetched). */
+        private const val NAME_AHEAD_WAIT_MS = 30_000L
         private const val SPUR_TURN_NEAR_M = 150.0
     private const val SNAP_LENGTH_SLACK = 1.05
         private const val SNAP_LENGTH_SLACK_M = 400.0

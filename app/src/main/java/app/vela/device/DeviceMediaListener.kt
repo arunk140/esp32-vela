@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.app.Person
 import android.content.ComponentName
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
@@ -12,7 +13,7 @@ import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 
 /**
- * Vela's notification listener. It does two things and looks at nothing else.
+ * Vela's notification listener. It does three things and looks at nothing else.
  *
  * Its existence lets the user grant Notification access, which Android requires before an app
  * may read what is playing (`MediaSessionManager.getActiveSessions`).
@@ -22,6 +23,9 @@ import androidx.core.app.NotificationManagerCompat
  * in the system's call style, which carries the caller and the Answer and Decline actions. Only
  * notifications in the call category are read, and only while "Incoming calls" is on.
  *
+ * It reads Google Maps' navigation notification while "Follow Google Maps" is on, for the nav
+ * device ([GoogleMapsNav]): only Google Maps' own, only in the navigation category.
+ *
  * `adb shell setprop debug.vela.tune.callProbe 1` logs the shape of each call notification
  * (app, category, button labels), never the caller or any text.
  */
@@ -29,6 +33,10 @@ class DeviceMediaListener : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val n = sbn.notification ?: return
+        if (isMapsNavigation(sbn)) {
+            if (DeviceLinkPrefs.followMaps.value) GoogleMapsNav.onPosted(n.extras)
+            return
+        }
         if (n.category != Notification.CATEGORY_CALL) return
         probe("posted", sbn)
         val calls = DeviceCalls.running ?: return
@@ -56,10 +64,30 @@ class DeviceMediaListener : NotificationListenerService() {
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        if (isMapsNavigation(sbn)) {
+            GoogleMapsNav.onRemoved()
+            return
+        }
         if (sbn.notification?.category != Notification.CATEGORY_CALL) return
         probe("removed", sbn)
         DeviceCalls.running?.onAppCallEnded(sbn.key)
     }
+
+    /** Vela may have been started after Google Maps began navigating: read what is up now. */
+    override fun onListenerConnected() {
+        connected = true
+        if (!DeviceLinkPrefs.followMaps.value) return
+        val live = runCatching { activeNotifications }.getOrNull()?.firstOrNull { isMapsNavigation(it) }
+        if (live != null) GoogleMapsNav.onPosted(live.notification.extras) else GoogleMapsNav.onRemoved()
+    }
+
+    override fun onListenerDisconnected() {
+        connected = false
+        GoogleMapsNav.onRemoved()
+    }
+
+    private fun isMapsNavigation(sbn: StatusBarNotification) =
+        sbn.packageName == GoogleMapsNav.PACKAGE && sbn.notification?.category == CATEGORY_NAVIGATION
 
     private fun probe(what: String, sbn: StatusBarNotification) {
         if (!app.vela.ui.AppTune.localOn("callProbe")) return
@@ -87,8 +115,41 @@ class DeviceMediaListener : NotificationListenerService() {
         private const val EXTRA_ANSWER_INTENT = "android.answerIntent"
         private const val EXTRA_DECLINE_INTENT = "android.declineIntent"
         private const val CALL_TYPE_INCOMING = 1
+        /** Notification.CATEGORY_NAVIGATION, which is API 28; minSdk is 26. */
+        private const val CATEGORY_NAVIGATION = "navigation"
 
         fun component(ctx: Context) = ComponentName(ctx, DeviceMediaListener::class.java)
+
+        /** Android is bound to the listener: its callbacks arrive. */
+        @Volatile var connected = false
+            private set
+
+        /**
+         * Asks Android to bind the listener again when it has access but is not bound. An update of
+         * the app unbinds it, and some systems (MIUI among them) do not bind it again by themselves:
+         * the media and Google Maps' turns then stopped reaching the device until access was toggled.
+         * MIUI ignores the rebind request too, so when the listener is still not bound
+         * [REBIND_CHECK_MS] later, the listener component is turned off and on, which makes the
+         * system bind it.
+         */
+        fun rebindIfNeeded(ctx: Context) {
+            if (connected || !hasAccess(ctx)) return
+            val app = ctx.applicationContext
+            runCatching { NotificationListenerService.requestRebind(component(app)) }
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                if (connected || !hasAccess(app)) return@postDelayed
+                runCatching {
+                    val pm = app.packageManager
+                    val c = component(app)
+                    pm.setComponentEnabledSetting(c, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+                    pm.setComponentEnabledSetting(c, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
+                    NotificationListenerService.requestRebind(c)
+                    Log.i("VelaDevice", "listener not bound after a rebind request: component toggled")
+                }
+            }, REBIND_CHECK_MS)
+        }
+
+        private const val REBIND_CHECK_MS = 3_000L
 
         fun hasAccess(ctx: Context): Boolean =
             NotificationManagerCompat.getEnabledListenerPackages(ctx).contains(ctx.packageName)

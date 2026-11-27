@@ -1636,6 +1636,8 @@
     <string name="device_minimal_hint">A black screen with the route line, the streets around you in outline, your arrow, the next turn and how far along the trip you are. It reads no map from the card, which saves power. A long press on the device switches it too.</string>
     <string name="device_also_show">Also show</string>
     <string name="device_media">What is playing</string>
+    <string name="device_follow_maps">Follow Google Maps</string>
+    <string name="device_follow_maps_hint">When Vela is not navigating, the device shows Google Maps\' next turn, its distance and the road, read from Google Maps\' notification on this phone. Google Maps shares no route line, so none is drawn. Turns are read in English. Needs notification access.</string>
     <string name="device_media_hint">The track, its cover and the volume, with the device\'s buttons controlling playback. Needs notification access, which Android grants on its own page.</string>
     <string name="device_calls">Incoming calls</string>
     <string name="device_calls_hint">Who is calling, with buttons on the device to answer or decline. Needs the phone, call log and contacts permissions. Calls in WhatsApp and similar apps also need notification access.</string>

@@ -1,13 +1,17 @@
 package app.vela.device
 
+import app.vela.core.data.naming.HeadNaming
+
 import app.vela.core.model.LatLng
 import app.vela.core.model.Maneuver
 import app.vela.core.model.ManeuverType
 import app.vela.core.model.Route
 import app.vela.core.model.TrafficSpan
+import app.vela.core.model.distanceTo
 import app.vela.core.nav.NavSession
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.roundToLong
 
 /**
  * Maneuver codes on the wire. They mirror `NAV_*` in the device firmware's `ble_service.h` and
@@ -58,6 +62,9 @@ data class DeviceNavFrame(
     val remainingM: Int = 0,
     val remainingS: Int = 0,
     val dest: LatLng? = null,
+    /** The drive has no route line (Google Maps' turns, [GoogleMapsNav]): the device shows a
+     *  full-screen turn card instead of the map (flag [DeviceNavEncoder.F_TURN_ONLY]). */
+    val turnOnly: Boolean = false,
 ) {
     companion object {
         val IDLE = DeviceNavFrame()
@@ -66,10 +73,14 @@ data class DeviceNavFrame(
          * The line under the distance: the road being entered, else its number, else the
          * place for the last step, else the instruction the phone's own banner shows. Many
          * steps carry no road (a fork, a ramp, a turn onto a lane with no name), and the
-         * instruction is always there.
+         * instruction is always there. An instruction that says the step takes a flyover,
+         * stays below one, or goes through a tunnel wins over the road name: the device reads
+         * those words to show its road badge (`HeadNaming.mentionsRoadKind`).
          */
         private fun lineFor(next: Maneuver?, destination: String): String {
             if (next == null) return ""
+            val said = next.instruction.trim()
+            if (HeadNaming.mentionsRoadKind(said) && !HeadNaming.mentionsRoadKind(next.road)) return said
             next.road?.takeIf { it.isNotBlank() }?.let { return it }
             next.ref?.takeIf { it.isNotBlank() }?.let { return it }
             if (next.type == ManeuverType.ARRIVE && destination.isNotBlank()) return destination
@@ -127,6 +138,7 @@ class DeviceNavEncoder(private val out: Out) {
     private var lastDest: Pair<Int, Int>? = null
     private var destSent = false
     private var lastLimit: Pair<Boolean, Int>? = null
+    private var lastStops: ByteArray? = null
 
     fun send(f: DeviceNavFrame) {
         if (!out.navReady()) return
@@ -155,6 +167,17 @@ class DeviceNavEncoder(private val out: Out) {
         out.navWrite(limit(imperial, limit), "navlim")
     }
 
+    /** The waypoint face (bike-os): which stop is next, of how many, and how far. Sent when it
+     *  changes; the distance is rounded to 50 m and the time to 30 s so a drive does not send it
+     *  every second. count 0 clears the face. */
+    fun sendStops(next: Int, count: Int, distanceM: Double, seconds: Double, label: String) {
+        if (!out.navReady()) return
+        val b = stops(next, count, (distanceM / 50).roundToLong() * 50, (seconds / 30).roundToLong() * 30, label)
+        if (lastStops?.contentEquals(b) == true) return
+        lastStops = b
+        out.navWrite(b, "navstops")
+    }
+
     /** The route line as [routeChunks] built it. Never coalesced: every chunk is needed. */
     fun sendRoute(chunks: List<ByteArray>) {
         if (!out.navReady()) return
@@ -167,6 +190,7 @@ class DeviceNavEncoder(private val out: Out) {
         lastDest = null
         destSent = false
         lastLimit = null
+        lastStops = null
     }
 
     companion object {
@@ -177,21 +201,27 @@ class DeviceNavEncoder(private val out: Out) {
         private const val LIMIT: Byte = 0x05
         private const val PHONE: Byte = 0x07
         private const val TRAFFIC: Byte = 0x08
+        private const val STOPS: Byte = 0x09
+        /** `NAV_STOPS_LABEL_MAX`, in bytes. */
+        const val STOPS_LABEL_MAX = 40
         /** `NAV_TRAFFIC_MAX`. */
         const val TRAFFIC_MAX = 50
         private const val F_ACTIVE = 0x01
         /** `NAV_F_REM_10M`: the remaining distance is in units of 10 m. */
         private const val F_REM_10M = 0x04
+        /** `NAV_F_TURN_ONLY`: no route line comes with this drive (bike-os shows its turn card). */
+        const val F_TURN_ONLY = 0x08
         private const val ROUTE_F_START = 0x01
         private const val ROUTE_F_END = 0x02
         /** `NAV_TEXT_MAX`, in bytes. */
         const val TEXT_MAX = 48
         /** `NAV_ROUTE_CHUNK_MAX`, in points. */
         const val ROUTE_CHUNK = 31
-        /** `ROUTE_MAX` in the firmware's `map_view.c`. */
-        const val ROUTE_MAX_POINTS = 512
+        /** `ROUTE_MAX` in the firmware's `map_view.c` (bike-os 0.10+; firmware_ws146 took 512). */
+        const val ROUTE_MAX_POINTS = 2048
 
         private fun u16(v: Int) = v.coerceIn(0, 0xFFFF).toShort()
+
         private fun e7(deg: Double) = Math.round(deg * 1e7).toInt()
 
         /** 12 bytes: type, flags, maneuver, u16 dist, after maneuver, u16 after dist, u16
@@ -200,7 +230,7 @@ class DeviceNavEncoder(private val out: Out) {
         fun state(f: DeviceNavFrame): ByteArray =
             ByteBuffer.allocate(12).order(ByteOrder.LITTLE_ENDIAN).apply {
                 put(STATE)
-                put(((if (f.active) F_ACTIVE else 0) or F_REM_10M).toByte())
+                put(((if (f.active) F_ACTIVE else 0) or F_REM_10M or (if (f.turnOnly) F_TURN_ONLY else 0)).toByte())
                 put(f.maneuver.toByte())
                 putShort(u16(f.distanceM))
                 put(f.afterManeuver.toByte())
@@ -240,7 +270,7 @@ class DeviceNavEncoder(private val out: Out) {
                 put(PHONE)
                 put((batteryPct?.coerceIn(0, 100) ?: 0xFF).toByte())
                 put(((if (charging) 1 else 0) or (if (clock24) 2 else 0)).toByte())
-                put(0)
+                put(0.toByte())
                 putInt((epochS and 0xFFFFFFFFL).toInt())
                 putShort(utcOffsetMin.toShort())
                 putShort(0)
@@ -255,6 +285,27 @@ class DeviceNavEncoder(private val out: Out) {
                 bytes = s.toByteArray(Charsets.UTF_8)
             }
             return byteArrayOf(TEXT, bytes.size.toByte()) + bytes
+        }
+
+        /** NAV_STOPS (bike-os): type, next stop (1-based, 0 = none left), count, 0, u32 meters,
+         *  u16 seconds, label length, then the label as UTF-8 cut at a character boundary. */
+        fun stops(next: Int, count: Int, distanceM: Long, seconds: Long, label: String): ByteArray {
+            var s = label
+            var bytes = s.toByteArray(Charsets.UTF_8)
+            while (bytes.size > STOPS_LABEL_MAX) {
+                s = s.dropLast(1)
+                bytes = s.toByteArray(Charsets.UTF_8)
+            }
+            return ByteBuffer.allocate(11 + bytes.size).order(ByteOrder.LITTLE_ENDIAN).apply {
+                put(STOPS)
+                put(next.coerceIn(0, 255).toByte())
+                put(count.coerceIn(0, 255).toByte())
+                put(0.toByte())
+                putInt(distanceM.coerceIn(0, 0xFFFF_FFFFL).toInt())
+                putShort(u16(seconds.coerceIn(0, 0xFFFF).toInt()))
+                put(bytes.size.toByte())
+                put(bytes)
+            }.array()
         }
 
         /** 10 bytes: type, present, i32 lat e7, i32 lon e7. Null clears the pin. */
@@ -276,8 +327,10 @@ class DeviceNavEncoder(private val out: Out) {
 
         /** Header (type, flags, seq, count) then count pairs of i32 lat e7, lon e7. Fewer than
          *  two points is one empty START|END chunk, which clears the line. */
-        fun routeChunks(points: List<LatLng>): List<ByteArray> {
-            val pts = RouteSimplify.forDisplay(points, ROUTE_MAX_POINTS)
+        fun routeChunks(points: List<LatLng>, progressM: Double = 0.0): List<ByteArray> {
+            // bike-os: full detail for the road ahead of [progressM], coarser further on; the
+            // service sends the line again every [RouteSimplify.RESEND_M] of progress.
+            val pts = RouteSimplify.forDevice(points, ROUTE_MAX_POINTS, progressM)
             if (pts.size < 2) {
                 return listOf(byteArrayOf(ROUTE, (ROUTE_F_START or ROUTE_F_END).toByte(), 0, 0))
             }
@@ -322,9 +375,62 @@ class DeviceNavEncoder(private val out: Out) {
  */
 object RouteSimplify {
 
-    fun forDisplay(points: List<LatLng>, maxPoints: Int): List<LatLng> {
+    /** Kept at full detail ([AHEAD_EPS_M]) past the rider's place on the route. */
+    const val AHEAD_M = 20_000.0
+    /** A little behind the rider too, so a resend does not cut the line at the marker. */
+    const val BEHIND_M = 300.0
+    const val AHEAD_EPS_M = 5.0
+    /** The part already ridden: only its shape matters (the device dims it). */
+    private const val PAST_EPS_M = 300.0
+    /** Detail kept for the far part beyond the window, at least. */
+    private const val FAR_MIN_POINTS = 64
+    /** Send the line again after this much progress, so the detail keeps ahead of the rider. */
+    const val RESEND_M = 8_000.0
+
+    /**
+     * For the bike display: the whole route, but its points spent where the rider is going.
+     * Thinning the whole line evenly (as [forDisplay] does) made a long ride's line drift tens
+     * of meters off the roads; here the next [AHEAD_M] keeps [AHEAD_EPS_M] and only the rest is
+     * thinned harder. The line still runs start to end, so places along it (traffic spans, the
+     * device's progress) keep their meaning.
+     */
+    fun forDevice(points: List<LatLng>, maxPoints: Int, progressM: Double): List<LatLng> {
         if (points.size <= maxPoints) return points
-        var eps = 5.0
+        val cum = DoubleArray(points.size)
+        for (i in 1 until points.size) cum[i] = cum[i - 1] + points[i - 1].distanceTo(points[i])
+        fun indexAt(m: Double): Int {
+            if (m <= 0.0) return 0
+            var lo = 0
+            var hi = points.size - 1
+            while (lo < hi) {
+                val mid = (lo + hi) / 2
+                if (cum[mid] < m) lo = mid + 1 else hi = mid
+            }
+            return lo
+        }
+        val from = indexAt(progressM - BEHIND_M)
+        val to = maxOf(from, indexAt(progressM + AHEAD_M))
+
+        val past = if (from > 0) reduce(points.subList(0, from + 1), PAST_EPS_M) else listOf(points[0])
+        val aheadMax = (maxPoints - past.size - FAR_MIN_POINTS).coerceAtLeast(2)
+        val ahead = fit(points.subList(from, to + 1), AHEAD_EPS_M, aheadMax)
+        val farMax = (maxPoints - past.size - ahead.size + 2).coerceAtLeast(2)
+        val far = if (to < points.size - 1) fit(points.subList(to, points.size), AHEAD_EPS_M, farMax) else listOf(points.last())
+
+        val out = ArrayList<LatLng>(past.size + ahead.size + far.size)
+        out += past
+        out += ahead.drop(1)
+        out += far.drop(1)
+        return if (out.size <= maxPoints) out else forDisplay(out, maxPoints)
+    }
+
+    fun forDisplay(points: List<LatLng>, maxPoints: Int): List<LatLng> = fit(points, 5.0, maxPoints)
+
+    /** Douglas-Peucker from [eps0], the tolerance doubling until the line fits [maxPoints]; then
+     *  an even stride if a kilometer of tolerance was still not enough. */
+    private fun fit(points: List<LatLng>, eps0: Double, maxPoints: Int): List<LatLng> {
+        if (points.size <= maxPoints) return points
+        var eps = eps0
         var out = reduce(points, eps)
         while (out.size > maxPoints && eps < 1000.0) {
             eps *= 2.0
