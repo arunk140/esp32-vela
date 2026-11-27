@@ -426,6 +426,8 @@ What Vela Maps does today, one line per feature. How each one works is in [SPEC.
 - The device's map follows your position and points the way you are heading.
 - During a drive it shows the next turn, the distance to it, the road you are turning onto, the
   distance left, the route line and the destination.
+- With "Follow Google Maps" on, it shows Google Maps' next turn, its distance and the road while
+  you navigate in Google Maps instead of Vela.
 - With "What is playing" on, it shows the track and its cover, and its buttons control playback
   and volume.
 - With "Incoming calls" on, it shows who is calling, and its buttons answer or decline. Calls in

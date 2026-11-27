@@ -7400,7 +7400,7 @@ Messages, all little-endian:
 | Message | Bytes | Fields | Sent |
 | --- | --- | --- | --- |
 | POSITION | 18 | lat and lon in 1e-7 degrees, speed cm/s, course 0.01 degrees, satellites (0), fix, phone clock ms | each fix, about 1 Hz |
-| NAV STATE `0x01` | 12 | flags (bit 0 active, bit 2 remaining distance in units of 10 m), maneuver, meters to it, the maneuver after, meters between the two, remaining distance, remaining seconds | on each session change and every 1 s |
+| NAV STATE `0x01` | 12 | flags (bit 0 active, bit 2 remaining distance in units of 10 m, bit 3 turn only: no route line, which bike-os shows as a full-screen turn card), maneuver, meters to it, the maneuver after, meters between the two, remaining distance, remaining seconds | on each session change and every 1 s |
 | NAV TEXT `0x02` | 2 + up to 48 | length, then UTF-8: the road being entered, else its number, else the destination for the last step, else the step's instruction | when it changes |
 | NAV DEST `0x03` | 10 | present, lat, lon | when it changes |
 | NAV ROUTE `0x04` | 4 + 8 per point | flags (start, end), sequence, count, up to 31 points | when the session's `Route` object changes |
@@ -7440,10 +7440,28 @@ Messages, all little-endian:
 
 Media (`DeviceMedia`) and calls (`DeviceCalls`) are off until their switches are turned on.
 Media reads the active media session, which Android allows once `DeviceMediaListener` has
-notification access; the listener does nothing else. It sends the track, a 200 by 200 JPEG of the
+notification access. It sends the track, a 200 by 200 JPEG of the
 cover from the bitmap the player publishes (never fetched from a URL), position and volume, and
 takes play, skip and volume commands back. Calls sends the caller's name and number while a call
 rings and takes answer and reject back.
+
+Follow Google Maps (`GoogleMapsNav`, `DeviceLinkPrefs.followMaps`, off by default) shows Google
+Maps' own drive on the device while Vela is not navigating. `DeviceMediaListener` reads only
+`com.google.android.apps.maps` notifications in the navigation category, and also reads the one
+already up when its listener connects. Google Maps' notification is a progress-style one: the
+title is the instruction with the distance in front of it ("100 m · Turn left onto Elm Street"),
+with no distance at the start and in the last meters before the turn; `android.shortCriticalText`
+is the distance alone; the progress is the meters driven of the trip's meters; the sub-text is
+the arrival ("Arrive 16:16"). The frame has the turn read from the instruction's English words
+(`maneuverOf`; other wording is sent as ahead), the distance (m, km, mi, ft, yd; a step that
+was counting down and shows none is sent as `NEAR_M`, 40 m, and one at the start as 0), the road
+after "onto", "toward", "to stay on" or "via" (else the instruction), the meters left as
+progress max minus progress, and the time left to the arrival clock time (the next day when it
+is more than 5 minutes past). `DeviceService.pushNav` sends it in place of the idle frame, flagged turn only (bit 3), with
+no route line, no stops and no destination: Google Maps publishes none. The removed
+notification clears it. Nothing is logged or kept. With either switch on, `DeviceService`
+asks Android to bind the listener again (`DeviceMediaListener.rebindIfNeeded`,
+`requestRebind`) whenever the link's bridges are synced and the listener is not connected.
 
 Nearby streets (`DeviceRoads`) give the minimal display something around its route line. They
 are the named roads of classes motorway to minor from the map's own z14 vector tiles

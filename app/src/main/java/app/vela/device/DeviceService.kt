@@ -279,6 +279,7 @@ class DeviceService : Service() {
 
     /** Start or stop the optional bridges to match their switches and the channels that are up. */
     private fun syncBridges() {
+        if (DeviceLinkPrefs.media.value || DeviceLinkPrefs.followMaps.value) DeviceMediaListener.rebindIfNeeded(this)
         val l = link
         if (l?.mediaReady == true && DeviceLinkPrefs.media.value) {
             media?.start()
@@ -384,10 +385,14 @@ class DeviceService : Service() {
     }
 
     private fun pushNav(s: NavSession.State) {
-        val frame = DeviceNavFrame.of(s)
+        val own = DeviceNavFrame.of(s)
+        // Follow Google Maps: with no Vela drive, Google Maps' turn when it is navigating. It has
+        // no route line to send, so the line is cleared.
+        val maps = if (own == DeviceNavFrame.IDLE && DeviceLinkPrefs.followMaps.value) GoogleMapsNav.frame.value else null
+        val frame = maps ?: own
         encoder.send(frame)
         // bike-os waypoint face: "1/3 waypoints" and the figures to the next stop.
-        val total = if (frame == DeviceNavFrame.IDLE) 0 else navSession.visibleStopCount()
+        val total = if (frame == DeviceNavFrame.IDLE || maps != null) 0 else navSession.visibleStopCount()
         val ahead = if (total == 0) 0 else navSession.remainingStops().size
         val next = s.nextStop
         encoder.sendStops(
@@ -402,7 +407,7 @@ class DeviceService : Service() {
         encoder.sendLimit(imperial, if (kmh == null) 0 else (if (imperial) kmh / 1.609344 else kmh).roundToInt())
         // The line goes with the frame: an idle frame (no drive, or a paused one) makes the
         // device clear its line, so the line is sent again when the drive is back.
-        val route = s.route?.takeIf { frame != DeviceNavFrame.IDLE }
+        val route = s.route?.takeIf { own != DeviceNavFrame.IDLE }
         val progressM = route?.let { (it.distanceMeters - s.remainingDistance).coerceAtLeast(0.0) } ?: 0.0
         // bike-os: a route too long to send whole at full detail goes again every
         // RouteSimplify.RESEND_M, so the detailed stretch stays ahead of the rider.

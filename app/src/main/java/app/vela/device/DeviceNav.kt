@@ -60,6 +60,9 @@ data class DeviceNavFrame(
     val remainingM: Int = 0,
     val remainingS: Int = 0,
     val dest: LatLng? = null,
+    /** The drive has no route line (Google Maps' turns, [GoogleMapsNav]): the device shows a
+     *  full-screen turn card instead of the map (flag [DeviceNavEncoder.F_TURN_ONLY]). */
+    val turnOnly: Boolean = false,
 ) {
     companion object {
         val IDLE = DeviceNavFrame()
@@ -200,6 +203,8 @@ class DeviceNavEncoder(private val out: Out) {
         private const val F_ACTIVE = 0x01
         /** `NAV_F_REM_10M`: the remaining distance is in units of 10 m. */
         private const val F_REM_10M = 0x04
+        /** `NAV_F_TURN_ONLY`: no route line comes with this drive (bike-os shows its turn card). */
+        const val F_TURN_ONLY = 0x08
         private const val ROUTE_F_START = 0x01
         private const val ROUTE_F_END = 0x02
         /** `NAV_TEXT_MAX`, in bytes. */
@@ -218,7 +223,7 @@ class DeviceNavEncoder(private val out: Out) {
         fun state(f: DeviceNavFrame): ByteArray =
             ByteBuffer.allocate(12).order(ByteOrder.LITTLE_ENDIAN).apply {
                 put(STATE)
-                put(((if (f.active) F_ACTIVE else 0) or F_REM_10M).toByte())
+                put(((if (f.active) F_ACTIVE else 0) or F_REM_10M or (if (f.turnOnly) F_TURN_ONLY else 0)).toByte())
                 put(f.maneuver.toByte())
                 putShort(u16(f.distanceM))
                 put(f.afterManeuver.toByte())
